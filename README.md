@@ -89,22 +89,6 @@ python honeypot.py
 To test the system without manual browsing, run the simulation script. It attempts to send benign, SQLi, and XSS requests.
 
 ```bash
-# In a separate terminal
-python simulate_traffic.py
-```
-
-### 3. Process Logs & Train Models
-Once you have generated some traffic (logs are stored in `logs/honeypot_logs.jsonl`), you need to parse them and train the machine learning models.
-
-**Step A: Parse Logs**
-Extract features from the raw logs into a CSV file (`logs/features.csv`).
-
-```bash
-python log_parser.py
-```
-
-**Step B: Train Models**
-Train the Isolation Forest and Random Forest models using the extracted features. Models are saved to `models/`.
 
 ```bash
 python train_models.py
