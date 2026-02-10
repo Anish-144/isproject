@@ -1,0 +1,219 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Banking Blue Theme - Professional & Trustworthy */
+    --background: 210 25% 98%;
+    --foreground: 215 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 15%;
+
+    /* Deep Navy Blue - Primary Brand */
+    --primary: 215 80% 25%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Light Blue Secondary */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 80% 25%;
+
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 15% 45%;
+
+    /* Accent Blue */
+    --accent: 210 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Success Green for Positive Balances */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning for Alerts */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 215 80% 25%;
+
+    --radius: 0.75rem;
+
+    /* Custom Banking Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(215, 80%, 25%) 0%, hsl(210, 100%, 35%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%) 0%, hsl(210, 25%, 98%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(215, 80%, 20%) 0%, hsl(215, 70%, 30%) 50%, hsl(210, 80%, 40%) 100%);
+    
+    /* Shadows */
+    --shadow-card: 0 4px 6px -1px hsla(215, 25%, 15%, 0.08), 0 2px 4px -2px hsla(215, 25%, 15%, 0.05);
+    --shadow-elevated: 0 10px 25px -5px hsla(215, 25%, 15%, 0.12), 0 8px 10px -6px hsla(215, 25%, 15%, 0.05);
+    --shadow-glow: 0 0 20px hsla(210, 100%, 50%, 0.15);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 215 30% 8%;
+    --foreground: 210 20% 95%;
+
+    --card: 215 25% 12%;
+    --card-foreground: 210 20% 95%;
+
+    --popover: 215 25% 12%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 210 100% 55%;
+    --primary-foreground: 215 30% 8%;
+
+    --secondary: 215 20% 18%;
+    --secondary-foreground: 210 20% 95%;
+
+    --muted: 215 20% 18%;
+    --muted-foreground: 215 15% 60%;
+
+    --accent: 210 100% 55%;
+    --accent-foreground: 215 30% 8%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 215 20% 22%;
+    --input: 215 20% 22%;
+    --ring: 210 100% 55%;
+    
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+}
+
+@layer components {
+  .banking-card {
+    @apply bg-card rounded-xl border border-border p-6;
+    box-shadow: var(--shadow-card);
+  }
+
+  .banking-card-elevated {
+    @apply bg-card rounded-xl border border-border p-6;
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .banking-gradient-bg {
+    background: var(--gradient-hero);
+  }
+
+  .banking-button-primary {
+    @apply bg-primary text-primary-foreground font-semibold py-3 px-6 rounded-lg transition-all duration-200;
+    background: var(--gradient-primary);
+  }
+
+  .banking-button-primary:hover {
+    @apply opacity-90 transform scale-[1.02];
+    box-shadow: var(--shadow-glow);
+  }
+
+  .banking-input {
+    @apply w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground transition-all duration-200;
+  }
+
+  .banking-input:focus {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  .balance-display {
+    @apply text-4xl font-bold tracking-tight;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .transaction-row {
+    @apply flex items-center justify-between py-4 border-b border-border last:border-0 transition-colors duration-150;
+  }
+
+  .transaction-row:hover {
+    @apply bg-muted/50;
+  }
+}
+
+@layer utilities {
+  .animate-fade-up {
+    animation: fadeUp 0.5s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.4s ease-out forwards;
+  }
+
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+}

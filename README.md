@@ -89,6 +89,22 @@ python honeypot.py
 To test the system without manual browsing, run the simulation script. It attempts to send benign, SQLi, and XSS requests.
 
 ```bash
+# In a separate terminal
+python simulate_traffic.py
+```
+
+### 3. Process Logs & Train Models
+Once you have generated some traffic (logs are stored in `logs/honeypot_logs.jsonl`), you need to parse them and train the machine learning models.
+
+**Step A: Parse Logs**
+Extract features from the raw logs into a CSV file (`logs/features.csv`).
+
+```bash
+python log_parser.py
+```
+
+**Step B: Train Models**
+Train the Isolation Forest and Random Forest models using the extracted features. Models are saved to `models/`.
 
 ```bash
 python train_models.py
@@ -96,18 +112,39 @@ python train_models.py
 
 > **Note:** The honeypot and dashboard need these models to perform predictions. If you encounter errors about missing models, run these two steps.
 
-### 4. Run the SOC Dashboard
+### 4. Run the Banking Frontend (Sentinel Bank)
+The new React-based banking interface runs on port 3000 and proxies API requests to the honeypot backend.
+
+1.  Navigate to the frontend directory:
+    ```bash
+    cd sentinel-bank-main
+    ```
+
+2.  Install dependencies (if not done):
+    ```bash
+    npm install
+    ```
+
+3.  Start the frontend:
+    ```bash
+    npm run dev
+    ```
+
+4.  Access the banking app at `http://localhost:3000`.
+
+### 5. Run the SOC Dashboard
 Visualize the attacks and anomalies in real-time using Streamlit.
 
 ```bash
-streamlit run dashboard.py 
+# From the root directory
+streamlit run dashboard.py
 ##or
 python -m streamlit run dashboard.py
 ```
 
 This will open the dashboard in your default browser (usually `http://localhost:8501`).
 
-### 5. Real-Time Prediction (CLI)
+### 6. Real-Time Prediction (CLI)
 For a command-line interface that tails the log and prints predictions in real-time:
 
 ```bash

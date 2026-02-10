@@ -1,8 +1,15 @@
 # honeypot.py
 from flask import Flask, request, jsonify, render_template_string
 import json, datetime, os, joblib
+from flask_cors import CORS
+from honey_logger import HoneyLogger
 
 app = Flask(__name__)
+CORS(app) # Enable CORS for all routes (important for React frontend on port 3000)
+
+# Initialize HoneyLogger
+honey_logger = HoneyLogger()
+
 os.makedirs("logs", exist_ok=True)
 LOGFILE = "honeypot_logs.jsonl"
 LOGPATH = os.path.join("logs", LOGFILE)
@@ -44,6 +51,31 @@ def make_entry(req):
         "headers": headers
     }
     return entry
+
+@app.before_request
+def log_request_info():
+    # Skip logging for static files or if needed
+    if request.path.startswith('/static'):
+        return
+
+    # Gather details for HoneyLogger
+    details = {
+        "args": request.args.to_dict(),
+        "form": request.form.to_dict(),
+        "headers": dict(request.headers),
+        "data": request.get_data(as_text=True)
+    }
+    
+    # Generic request logging (will auto-detect attacks)
+    honey_logger.log_event(
+        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        ip=request.remote_addr,
+        endpoint=request.path,
+        method=request.method,
+        event_type="request",
+        details=details
+    )
+
 
 @app.route("/", methods=["GET","POST"])
 def trap_root():
@@ -330,6 +362,32 @@ def careers():
     write_log(entry)
     return render_template_string(open('templates/careers.html', encoding='utf-8').read())
 
+@app.route("/admin-panel", methods=["GET", "POST"])
+def trap_admin_panel():
+    honey_logger.log_event(
+        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        ip=request.remote_addr,
+        endpoint=request.path,
+        method=request.method,
+        event_type="access_denied_trap",
+        details="Attempted access to fake admin panel",
+        severity="medium"
+    )
+    return "Access Denied", 403
+
+@app.route("/config-backup", methods=["GET"])
+def trap_config_backup():
+    honey_logger.log_event(
+        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        ip=request.remote_addr,
+        endpoint=request.path,
+        method=request.method,
+        event_type="access_denied_trap",
+        details="Attempted access to fake config backup",
+        severity="medium"
+    )
+    return "Access Denied", 403
+
 @app.route("/api/contact", methods=["POST"])
 def api_contact():
     entry = make_entry(request)
@@ -342,14 +400,41 @@ def download_file(filename):
     entry = make_entry(request)
     entry['download_attempt'] = filename
     write_log(entry)
+    honey_logger.log_event(
+        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        ip=request.remote_addr,
+        endpoint=request.path,
+        method=request.method,
+        event_type="file_download_attempt",
+        details={"filename": filename},
+        severity="low"
+    )
     return "File not found", 404
 
 @app.route("/api/log", methods=["POST"])
 def api_log():
-    entry = make_entry(request)
-    entry['client_log'] = request.get_json(silent=True)
-    write_log(entry)
-    return jsonify({"status": "logged"})
+    try:
+        data = request.get_json(silent=True) or {}
+        
+        # Log via HoneyLogger (it will write to banking_logs.json)
+        honey_logger.log_event(
+            timestamp=data.get('timestamp') or datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            ip=request.remote_addr, # We use the direct IP as we don't trust client-sent IP for security logs
+            endpoint=data.get('page_visited') or 'frontend_log',
+            method="POST",
+            event_type=data.get('event_type') or 'frontend_log',
+            details=data.get('input_data') or data,
+            severity="high" if data.get('is_suspicious') else "low"
+        )
+        
+        # Also maintain legacy logging for now
+        entry = make_entry(request)
+        entry['client_log'] = data
+        write_log(entry)
+
+        return jsonify({"status": "logged"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/apply/<position>", methods=["GET","POST"])
 def apply_position(position):
