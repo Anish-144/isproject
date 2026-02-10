@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Careers - SecureCorp{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <div class="container">
+        <h1>Join Our Team</h1>
+        <p>Help us protect the digital world</p>
+    </div>
+</div>
+
+<div class="container">
+    <div class="careers-content">
+        <div class="careers-intro">
+            <h2>Why SecureCorp?</h2>
+            <div class="benefits-grid">
+                <div class="benefit-item">
+                    <div class="benefit-icon">🚀</div>
+                    <h4>Innovation</h4>
+                    <p>Work with cutting-edge security technologies and AI-driven solutions</p>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">🌍</div>
+                    <h4>Impact</h4>
+                    <p>Make a real difference protecting organizations worldwide</p>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">📈</div>
+                    <h4>Growth</h4>
+                    <p>Continuous learning opportunities and career advancement</p>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">⚖️</div>
+                    <h4>Work-Life Balance</h4>
+                    <p>Flexible schedules and remote work options</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="open-positions">
+            <h2>Open Positions</h2>
+
+            <div class="position-card">
+                <div class="position-header">
+                    <h3>Senior Security Engineer</h3>
+                    <span class="location">Remote / New York, NY</span>
+                </div>
+                <p>Design and implement advanced security solutions using AI and machine learning technologies.</p>
+                <div class="position-tags">
+                    <span>Python</span>
+                    <span>AI/ML</span>
+                    <span>Cloud Security</span>
+                </div>
+                <a href="/apply/security-engineer" class="btn btn-primary">Apply Now</a>
+            </div>
+
+            <div class="position-card">
+                <div class="position-header">
+                    <h3>Cybersecurity Analyst</h3>
+                    <span class="location">San Francisco, CA</span>
+                </div>
+                <p>Monitor security systems, analyze threats, and respond to security incidents in real-time.</p>
+                <div class="position-tags">
+                    <span>SIEM</span>
+                    <span>Threat Hunting</span>
+                    <span>Incident Response</span>
+                </div>
+                <a href="/apply/cyber-analyst" class="btn btn-primary">Apply Now</a>
+            </div>
+
+            <div class="position-card">
+                <div class="position-header">
+                    <h3>DevSecOps Engineer</h3>
+                    <span class="location">Remote</span>
+                </div>
+                <p>Integrate security practices into development pipelines and ensure secure deployments.</p>
+                <div class="position-tags">
+                    <span>Docker</span>
+                    <span>Kubernetes</span>
+                    <span>CI/CD</span>
+                </div>
+                <a href="/apply/devsecops" class="btn btn-primary">Apply Now</a>
+            </div>
+
+            <div class="position-card">
+                <div class="position-header">
+                    <h3>Security Consultant</h3>
+                    <span class="location">Chicago, IL / Remote</span>
+                </div>
+                <p>Provide expert security consulting to enterprise clients and conduct security assessments.</p>
+                <div class="position-tags">
+                    <span>Consulting</span>
+                    <span>Risk Assessment</span>
+                    <span>Compliance</span>
+                </div>
+                <a href="/apply/consultant" class="btn btn-primary">Apply Now</a>
+            </div>
+        </div>
+
+        <div class="culture-section">
+            <h2>Our Culture</h2>
+            <div class="culture-grid">
+                <div class="culture-item">
+                    <h4>Collaboration</h4>
+                    <p>We believe in the power of teamwork and knowledge sharing</p>
+                </div>
+                <div class="culture-item">
+                    <h4>Innovation</h4>
+                    <p>We're constantly pushing the boundaries of what's possible in security</p>
+                </div>
+                <div class="culture-item">
+                    <h4>Integrity</h4>
+                    <p>Trust and transparency are at the core of everything we do</p>
+                </div>
+                <div class="culture-item">
+                    <h4>Excellence</h4>
+                    <p>We strive for excellence in every project and interaction</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.careers-content {
+    margin: 4rem 0;
+}
+
+.careers-intro {
+    text-align: center;
+    margin-bottom: 4rem;
+}
+
+.benefits-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.benefit-item {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.benefit-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.benefit-item h4 {
+    color: #667eea;
+    margin-bottom: 1rem;
+}
+
+.open-positions {
+    margin-bottom: 4rem;
+}
+
+.position-card {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.position-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.position-header h3 {
+    color: #667eea;
+    margin: 0;
+}
+
+.location {
+    background: #f0f0f0;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.position-tags {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.position-tags span {
+    background: #667eea;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+}
+
+.culture-section {
+    text-align: center;
+}
+
+.culture-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.culture-item {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+.culture-item h4 {
+    color: #667eea;
+    margin-bottom: 1rem;
+}
+</style>
+{% endblock %}
