@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - SecureCorp{% endblock %}
+
+{% block content %}
+<style>
+    .admin-container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 1.5rem 2rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        border-top: 3px solid #e74c3c;
+    }
+
+    .admin-header h2 {
+        margin: 0;
+        color: #333;
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    .stat-card .number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #667eea;
+    }
+
+    .stat-card .label {
+        font-size: 0.85rem;
+        color: #999;
+        margin-top: 0.25rem;
+    }
+
+    .admin-tab-nav {
+        display: flex;
+        gap: 0;
+        margin-bottom: 0;
+    }
+
+    .admin-tab-nav button {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #555;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s;
+    }
+
+    .admin-tab-nav button.active {
+        background: rgba(255, 255, 255, 0.95);
+        color: #e74c3c;
+        border-bottom-color: #e74c3c;
+    }
+
+    .admin-tab-nav button:hover {
+        background: rgba(255, 255, 255, 0.85);
+    }
+
+    .admin-tab {
+        display: none;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 0 0 10px 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .admin-tab.active {
+        display: block;
+    }
+
+    .query-item {
+        background: #f8f9fa;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        border-left: 4px solid #667eea;
+    }
+
+    .query-item .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .query-item .header strong {
+        color: #333;
+    }
+
+    .query-item .meta {
+        font-size: 0.85rem;
+        color: #999;
+    }
+
+    .query-item .query-text {
+        margin: 0.5rem 0;
+        color: #555;
+    }
+
+    .file-item {
+        background: #f8f9fa;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        border-left: 4px solid #27ae60;
+    }
+
+    .file-item.suspicious {
+        border-left-color: #e74c3c;
+        background: #fff5f5;
+    }
+
+    .severity-badge {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .sev-low {
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+
+    .sev-medium {
+        background: #fff3e0;
+        color: #e65100;
+    }
+
+    .sev-high {
+        background: #fbe9e7;
+        color: #d32f2f;
+    }
+
+    .sev-critical {
+        background: #ffebee;
+        color: #b71c1c;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #999;
+    }
+
+    .empty-state .icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+</style>
+
+<div class="admin-container">
+    <div class="admin-header">
+        <div>
+            <h2>🔒 Admin Dashboard</h2>
+            <span style="color: #999; font-size: 0.9rem;">Logged in as: {{ user }}</span>
+        </div>
+        <a href="/admin/logout" class="btn btn-outline"
+            style="font-size: 0.9rem; border-color: #e74c3c; color: #e74c3c;">Logout</a>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="number">{{ queries|length }}</div>
+            <div class="label">Customer Queries</div>
+        </div>
+        <div class="stat-card">
+            <div class="number">{{ uploaded_files|length }}</div>
+            <div class="label">Uploaded Files</div>
+        </div>
+        <div class="stat-card">
+            <div class="number">{{ uploaded_files|selectattr('event_type', 'equalto', 'suspicious_upload')|list|length
+                }}</div>
+            <div class="label">⚠️ Suspicious Uploads</div>
+        </div>
+    </div>
+
+    <div class="admin-tab-nav">
+        <button class="active" onclick="showAdminTab('queries')">📋 Customer Queries</button>
+        <button onclick="showAdminTab('files')">📁 Uploaded Files</button>
+    </div>
+
+    <!-- Customer Queries Tab -->
+    <div id="admin-queries" class="admin-tab active">
+        <h3 style="margin-bottom: 1rem;">Customer Queries</h3>
+        {% if queries %}
+        {% for q in queries|reverse %}
+        <div class="query-item">
+            <div class="header">
+                <strong>{{ q.details.get('user', 'Unknown User') }}</strong>
+                <span class="severity-badge sev-{{ q.severity }}">{{ q.severity }}</span>
+            </div>
+            <p class="query-text">{{ q.details.get('query', 'No content') }}</p>
+            <div class="meta">
+                🕐 {{ q.timestamp }} &nbsp;&nbsp; 🌐 {{ q.ip }} &nbsp;&nbsp; 📍 {{ q.endpoint }}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">📋</div>
+            <p>No customer queries yet.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Uploaded Files Tab -->
+    <div id="admin-files" class="admin-tab">
+        <h3 style="margin-bottom: 1rem;">Uploaded Files</h3>
+        {% if uploaded_files %}
+        {% for f in uploaded_files|reverse %}
+        <div class="file-item {{ 'suspicious' if f.event_type == 'suspicious_upload' else '' }}">
+            <div class="header">
+                <strong>📄 {{ f.details.get('filename', 'Unknown') }}</strong>
+                <span class="severity-badge sev-{{ f.severity }}">
+                    {% if f.event_type == 'suspicious_upload' %}⚠️ SUSPICIOUS{% else %}✅ Clean{% endif %}
+                </span>
+            </div>
+            <div style="margin: 0.5rem 0; font-size: 0.9rem; color: #555;">
+                Size: {{ f.details.get('file_size', 0) }} bytes &nbsp;&nbsp;
+                User: {{ f.details.get('user', 'Unknown') }}
+            </div>
+            {% if f.details.get('suspicions') %}
+            <div
+                style="background: #ffebee; padding: 0.5rem 0.75rem; border-radius: 5px; margin-top: 0.5rem; font-size: 0.85rem; color: #c62828;">
+                {% for s in f.details.suspicions %}
+                ⚠️ {{ s }}<br>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="meta">
+                🕐 {{ f.timestamp }} &nbsp;&nbsp; 🌐 {{ f.ip }}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">📁</div>
+            <p>No files uploaded yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    function showAdminTab(name) {
+        document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.admin-tab-nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('admin-' + name).classList.add('active');
+        event.target.classList.add('active');
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Dashboard - SecureCorp{% endblock %}
+
+{% block content %}
+<style>
+    .dashboard-container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+
+    .dash-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 1.5rem 2rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .dash-header h2 {
+        margin: 0;
+        color: #333;
+    }
+
+    .dash-header .user-info {
+        color: #666;
+        font-size: 0.95rem;
+    }
+
+    .tab-nav {
+        display: flex;
+        gap: 0;
+        margin-bottom: 0;
+    }
+
+    .tab-nav button {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #555;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s;
+    }
+
+    .tab-nav button.active {
+        background: rgba(255, 255, 255, 0.95);
+        color: #667eea;
+        border-bottom-color: #667eea;
+    }
+
+    .tab-nav button:hover {
+        background: rgba(255, 255, 255, 0.85);
+    }
+
+    .tab-content {
+        display: none;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 0 0 10px 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    .query-card,
+    .upload-card {
+        background: #f8f9fa;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        border-left: 4px solid #667eea;
+    }
+
+    .query-card .meta {
+        font-size: 0.85rem;
+        color: #999;
+        margin-top: 0.5rem;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .status-received {
+        background: #e3f2fd;
+        color: #1565c0;
+    }
+
+    .status-uploaded {
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+
+    textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 1rem;
+        font-family: inherit;
+        resize: vertical;
+        min-height: 100px;
+    }
+
+    textarea:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+
+    .file-input-wrapper {
+        border: 2px dashed #ddd;
+        padding: 2rem;
+        text-align: center;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        cursor: pointer;
+        transition: border-color 0.3s;
+    }
+
+    .file-input-wrapper:hover {
+        border-color: #667eea;
+    }
+
+    .file-input-wrapper input[type="file"] {
+        display: none;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #999;
+    }
+
+    .empty-state .icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+</style>
+
+<div class="dashboard-container">
+    <div class="dash-header">
+        <div>
+            <h2>👋 Welcome, {{ user }}</h2>
+            <span class="user-info">SecureCorp Customer Portal</span>
+        </div>
+        <a href="/customer/logout" class="btn btn-outline" style="font-size: 0.9rem;">Logout</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}" style="margin-bottom: 1rem;">{{ message }}</div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div class="tab-nav">
+        <button class="active" onclick="showTab('queries')">📋 Submit Query</button>
+        <button onclick="showTab('upload')">📁 Upload Files</button>
+        <button onclick="showTab('responses')">💬 Responses</button>
+        <button onclick="showTab('files')">📄 My Files</button>
+    </div>
+
+    <!-- Submit Query Tab -->
+    <div id="tab-queries" class="tab-content active">
+        <h3 style="margin-bottom: 1rem;">Submit a Security Query</h3>
+        <form method="POST" action="/customer/query">
+            <div class="form-group">
+                <label for="query">Your Question or Concern</label>
+                <textarea id="query" name="query" required
+                    placeholder="Describe your security concern, question, or request for assistance..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem;">Submit Query</button>
+        </form>
+    </div>
+
+    <!-- Upload Files Tab -->
+    <div id="tab-upload" class="tab-content">
+        <h3 style="margin-bottom: 1rem;">Upload Documents</h3>
+        <form method="POST" action="/customer/upload" enctype="multipart/form-data">
+            <div class="file-input-wrapper" onclick="document.getElementById('file').click()">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">📄</div>
+                <p style="color: #666;">Click to select a file (PDF recommended)</p>
+                <p style="color: #999; font-size: 0.85rem;">Max file size: 10MB</p>
+                <input type="file" id="file" name="file" accept=".pdf,.doc,.docx,.txt,.csv,.xlsx">
+            </div>
+            <div id="file-name" style="margin-bottom: 1rem; color: #667eea; font-weight: 500;"></div>
+            <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem;">Upload File</button>
+        </form>
+    </div>
+
+    <!-- View Responses Tab -->
+    <div id="tab-responses" class="tab-content">
+        <h3 style="margin-bottom: 1rem;">Your Query Responses</h3>
+        {% if queries %}
+        {% for q in queries|reverse %}
+        <div class="query-card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <strong>Query #{{ q.id }}</strong>
+                    <p style="margin: 0.5rem 0;">{{ q.text }}</p>
+                    {% if q.response %}
+                    <div style="background: #e8f5e9; padding: 0.75rem; border-radius: 5px; margin-top: 0.5rem;">
+                        <strong style="color: #2e7d32;">Response:</strong> {{ q.response }}
+                    </div>
+                    {% endif %}
+                </div>
+                <span class="status-badge status-received">{{ q.status }}</span>
+            </div>
+            <div class="meta">Submitted: {{ q.time }}</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">📋</div>
+            <p>No queries submitted yet. Use the "Submit Query" tab to get started.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- My Files Tab -->
+    <div id="tab-files" class="tab-content">
+        <h3 style="margin-bottom: 1rem;">Uploaded Files</h3>
+        {% if uploads %}
+        {% for u in uploads|reverse %}
+        <div class="query-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong>📄 {{ u.filename }}</strong>
+                    <span style="color: #999; font-size: 0.85rem; margin-left: 1rem;">{{ u.size }}</span>
+                </div>
+                <span class="status-badge status-uploaded">{{ u.status }}</span>
+            </div>
+            <div class="meta">Uploaded: {{ u.time }}</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">📁</div>
+            <p>No files uploaded yet. Use the "Upload Files" tab to share documents.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    function showTab(name) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-' + name).classList.add('active');
+        event.target.classList.add('active');
+    }
+    document.getElementById('file').addEventListener('change', function () {
+        var fn = this.files[0] ? this.files[0].name : '';
+        document.getElementById('file-name').textContent = fn ? 'Selected: ' + fn : '';
+    });
+</script>
+{% endblock %}

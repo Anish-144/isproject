@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Login - SecureCorp{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="form-container" style="border-top: 3px solid #e74c3c;">
+        <h2 style="text-align: center; margin-bottom: 0.5rem; color: #333;">🔒 Admin Portal</h2>
+        <p style="text-align: center; color: #999; margin-bottom: 2rem; font-size: 0.85rem;">Authorized personnel only
+        </p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/admin/login">
+            <div class="form-group">
+                <label for="username">Admin Username</label>
+                <input type="text" id="username" name="username" required placeholder="admin@securecorp.com">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Admin Password</label>
+                <input type="password" id="password" name="password" required placeholder="Enter admin password">
+            </div>
+
+            <button type="submit" class="btn btn-primary"
+                style="width: 100%; padding: 0.75rem; font-size: 1rem; background: #e74c3c;">Sign In as Admin</button>
+        </form>
+
+        <div style="text-align: center; margin-top: 1.5rem;">
+            <a href="/" style="color: #667eea; text-decoration: none; font-size: 0.9rem;">← Back to main site</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
