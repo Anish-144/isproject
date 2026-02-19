@@ -1,0 +1,7 @@
+{
+  "127.0.0.1": {
+    "reason": "Critical event: SQL Injection",
+    "timestamp": "2026-02-19T09:03:07.350807+00:00",
+    "blocked": true
+  }
+}

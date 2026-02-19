@@ -3,12 +3,20 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 import json, datetime, os, re, time, hashlib
 from collections import defaultdict
 from werkzeug.utils import secure_filename
+from mitre_mapping import enrich_with_mitre
+from response_engine import is_blocked, auto_respond
 
 app = Flask(__name__)
 app.secret_key = "securecorp-honeypot-secret-key-do-not-share"
 
 os.makedirs("logs", exist_ok=True)
 os.makedirs("uploads", exist_ok=True)
+
+# ── Automated response: block requests from blocklisted IPs ─────────────────
+@app.before_request
+def check_blocklist():
+    if is_blocked(request.remote_addr):
+        return jsonify({"error": "Access denied — your IP has been blocked"}), 403
 
 LOGFILE = "honeypot_logs.json"
 LOGPATH = os.path.join("logs", LOGFILE)
@@ -112,6 +120,10 @@ def build_log(req, event_type="request", severity="low", details=None, extra=Non
         log["details"]["attack_patterns"] = attack_info.get("patterns", [])
     if extra:
         log["details"].update(extra)
+    # Enrich with MITRE ATT&CK mapping
+    enrich_with_mitre(log)
+    # Automated response (block IP on critical events)
+    auto_respond(log)
     return log
 
 # ── Attack detection engine ─────────────────────────────────────────────────

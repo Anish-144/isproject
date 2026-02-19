@@ -4,3 +4,6 @@ scikit-learn
 streamlit
 requests
 joblib
+plotly
+folium
+streamlit-folium
