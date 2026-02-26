@@ -1,111 +1,435 @@
-# 🛡️ SecureCorp — AI-Powered Cybersecurity Honeypot
+# 🛡️ Honeypot-Based Threat Detection & SOC Monitoring Dashboard
 
-A realistic cybersecurity company website that functions as a **honeypot**, silently logging all visitor activity, detecting attacks, and feeding data to an AI-powered SOC dashboard.
+![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-2.x-000000?style=for-the-badge&logo=flask&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.x-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
+![License](https://img.shields.io/badge/License-Educational-green?style=for-the-badge)
 
----
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Getting Started](#getting-started)
-- [Test Credentials](#test-credentials)
-- [Website Pages](#website-pages)
-- [Honeypot Features](#honeypot-features)
-- [Attack Detection](#attack-detection)
-- [Log Format](#log-format)
-- [SOC Dashboard](#soc-dashboard)
-- [File Structure](#file-structure)
-- [Workflow](#workflow)
+> A honeypot-driven cybersecurity monitoring platform that captures malicious activity, maps it to **MITRE ATT&CK** techniques, applies severity classification, performs automated response actions, and visualizes threat intelligence through a **SOC-style dashboard**. The system presents itself as a legitimate corporate website (*SecureCorp*), while silently logging and analyzing all visitor interactions using both rule-based pattern matching and machine learning models.
 
 ---
 
-## Overview
+## 📑 Table of Contents
 
-SecureCorp presents itself as a legitimate cybersecurity company with a public website, customer portal, and admin portal. Behind the scenes, **every request is logged and analyzed** for malicious activity using both rule-based pattern matching and ML models (Isolation Forest + Random Forest).
+- [Key Features](#-key-features)
+- [System Architecture](#-system-architecture)
+- [Detection and Response Flow](#-detection-and-response-flow)
+- [Project Structure](#-project-structure)
+- [How the System Works](#-how-the-system-works)
+- [Dashboard Overview](#-dashboard-overview)
+- [Technologies Used](#-technologies-used)
+- [Security Design Philosophy](#-security-design-philosophy)
+- [Setup and Usage](#-setup-and-usage)
+- [Test Credentials](#-test-credentials)
+- [License](#-license)
 
-## Architecture
+---
+
+## ✨ Key Features
+
+### 🕸️ Honeypot-Based Attack Capture
+
+The platform operates a Flask web server that mimics a corporate cybersecurity website. It includes public-facing pages, a customer portal with login and file upload capabilities, an admin portal, and deliberately placed trap routes (such as `/admin-panel`, `/debug-console`, `/wp-admin`, `/phpmyadmin`, and `/.env`). Every HTTP request, form submission, login attempt, file upload, and navigation event is captured and persisted as structured JSON log entries.
+
+### 🎯 Adversary Simulation for Validation
+
+A dedicated adversary simulation module (`adversary_simulation/`) provides automated attack scripts that validate the detection pipeline:
+
+| Simulation | File | Description |
+|---|---|---|
+| SQL Injection | `sqli_sim.py` | Sends crafted SQL payloads to test injection detection |
+| Port Scanning | `port_scan_sim.py` | Simulates network reconnaissance activity |
+| Brute Force | `brute_force_sim.py` | Executes rapid login attempts against portals |
+
+### 🗺️ MITRE ATT&CK Mapping
+
+Every detected attack event is automatically enriched with a MITRE ATT&CK mapping via `mitre_mapping.py`. This assigns a **Technique ID** (e.g., T1190, T1110), **Technique Name**, and **Tactic** category to each event. The mapping standardizes threat classification and enables analysts to correlate observed behavior with known adversary tradecraft.
+
+### ⚠️ Severity Classification
+
+Events are classified into four severity levels:
+
+| Severity | Trigger Examples |
+|---|---|
+| 🟢 **Low** | Normal page views, benign browsing |
+| 🔵 **Medium** | Admin login attempts |
+| 🟠 **High** | Trap route hits, XSS payloads |
+| 🔴 **Critical** | SQL injection, malicious uploads, `.env` probes |
+
+### 🚫 Automated IP Blocking
+
+The response engine (`response_engine.py`) implements an automated blocking mechanism. When an event is classified as **Critical**, the source IP is immediately added to a persistent blocklist (`logs/blocklist.json`). A `before_request` middleware hook checks every incoming request against this blocklist and returns a **403 Forbidden** response for blocked addresses.
+
+### 🔔 Alert Notification System
+
+Critical security events trigger an alert pipeline that supports multiple notification backends. The architecture supports pluggable notification channels including **Telegram Bot API** and **SMTP email**, configurable through environment variables.
+
+### 📊 SOC-Style Dashboard
+
+A Streamlit-based Security Operations Center dashboard provides real-time visibility into all honeypot telemetry. Features include:
+
+- Interactive **Plotly** charts
+- Global attack map powered by **Folium**
+- KPI summary cards
+- Structured event tables with expandable detail views
+- Data export capabilities
+- ML-powered predictive analytics (Isolation Forest + Random Forest)
+
+### 🌍 Interactive Global Attack Map
+
+The Attack Map tab renders a dark-themed world map with geolocation markers for each attacking IP. Markers are **color-coded by severity** and **sized proportionally** to attempt count. Popup overlays display detailed attack context including IP address, country, city, attack type, MITRE technique, and attempt count.
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+flowchart LR
+    A["Attacker / Browser"] -->|HTTP Request| B["Flask Honeypot\n(Port 8080)"]
+    B -->|Log Entry| C["Event Logger\n(honeypot_logs.json)"]
+    C --> D["MITRE ATT&CK\nMapping"]
+    D --> E["Severity\nClassification"]
+    E --> F["Response Engine"]
+    F -->|Block IP| G["Blocklist\n(blocklist.json)"]
+    F -->|Alert| H["Notification\nSystem"]
+    C --> I["Feature\nExtraction"]
+    I --> J["ML Models\n(IF + RF)"]
+    J --> K["Streamlit Dashboard\n(Port 8501)"]
+    C --> K
+    G --> B
+```
+
+```mermaid
+flowchart TB
+    subgraph Frontend
+        P1["Public Pages"]
+        P2["Customer Portal"]
+        P3["Admin Portal"]
+        P4["Trap Routes"]
+    end
+
+    subgraph Backend
+        HN["Flask Honeypot Server"]
+        LP["Log Parser"]
+        MM["MITRE Mapping Module"]
+        RE["Response Engine"]
+    end
+
+    subgraph Data
+        LG["honeypot_logs.json"]
+        BL["blocklist.json"]
+        FT["features.csv"]
+        ML["ML Models (joblib)"]
+    end
+
+    subgraph Dashboard
+        DB["Streamlit SOC Dashboard"]
+    end
+
+    Frontend --> HN
+    HN --> LG
+    HN --> MM
+    HN --> RE
+    RE --> BL
+    LP --> FT
+    LG --> LP
+    FT --> ML
+    LG --> DB
+    ML --> DB
+    BL --> DB
+```
+
+---
+
+## 🔄 Detection and Response Flow
+
+```mermaid
+flowchart TD
+    A["Incoming HTTP Request"] --> B{"Blocked IP?"}
+    B -->|Yes| C["403 Forbidden\nAccess Denied"]
+    B -->|No| D["Route Handler\nProcesses Request"]
+    D --> E["Build Log Entry\n(Timestamp, IP, Payload)"]
+    E --> F["Attack Detection Engine"]
+    F --> G{"Attack Detected?"}
+    G -->|SQLi| H["Severity: Critical\nClass: sqli"]
+    G -->|XSS| I["Severity: High\nClass: xss"]
+    G -->|Brute Force| J["Severity: High\nClass: brute_force"]
+    G -->|Suspicious Upload| K["Severity: Critical\nClass: malicious_upload"]
+    G -->|None| L["Severity: Low\nClass: benign"]
+    H --> M["Enrich with MITRE ATT&CK"]
+    I --> M
+    J --> M
+    K --> M
+    L --> M
+    M --> N["Automated Response Engine"]
+    N --> O{"Severity == Critical?"}
+    O -->|Yes| P["Block Source IP"]
+    O -->|Yes| Q["Send Alert Notification"]
+    O -->|No| R["Log Only"]
+    P --> S["Write to blocklist.json"]
+    Q --> S
+    R --> S
+    S --> T["Persist to honeypot_logs.json"]
+    T --> U["Dashboard Visualizes Event"]
+```
+
+---
+
+## 📁 Project Structure
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    Browser / Attacker                  │
-└──────────────┬───────────────────────────┬────────────┘
-               │                           │
-    ┌──────────▼──────────┐    ┌───────────▼───────────┐
-    │  Flask Honeypot     │    │  Streamlit Dashboard   │
-    │  (port 8080)        │    │  (port 8501)           │
-    │                     │    │                        │
-    │  • Public Pages     │    │  • KPI Metrics         │
-    │  • Customer Portal  │    │  • Event Charts        │
-    │  • Admin Portal     │    │  • Attack Log Viewer   │
-    │  • Trap Routes      │    │  • Trap Hit Monitor    │
-    │  • Attack Detection │    │  • Upload Tracker      │
-    └──────────┬──────────┘    └───────────┬───────────┘
-               │                           │
-               ▼                           ▼
-    ┌──────────────────────────────────────────────────┐
-    │           logs/honeypot_logs.json                  │
-    │  (JSONL — one JSON object per line)               │
-    └──────────────────────┬───────────────────────────┘
-                           │
-                ┌──────────▼──────────┐
-                │   ML Models          │
-                │  • IsolationForest   │
-                │  • RandomForest      │
-                │  (models/ directory) │
-                └─────────────────────┘
+isproject-main/
+│
+├── honeypot.py                  # Flask honeypot server (port 8080)
+├── dashboard.py                 # Streamlit SOC dashboard (port 8501)
+├── log_parser.py                # Feature extraction from raw logs
+├── train_models.py              # ML model training pipeline
+├── predict_service.py           # Real-time prediction monitor
+├── simulate_traffic.py          # Synthetic traffic generator
+├── mitre_mapping.py             # MITRE ATT&CK technique enrichment
+├── response_engine.py           # Automated blocking and alert engine
+├── geo_lookup.py                # IP geolocation resolution
+├── requirements.txt             # Python dependencies
+├── README.md                    # Project documentation
+│
+├── adversary_simulation/        # Automated attack validation scripts
+│   ├── __init__.py              # Module initializer
+│   ├── sqli_sim.py              # SQL injection attack simulation
+│   ├── port_scan_sim.py         # Port scanning simulation
+│   └── brute_force_sim.py       # Brute force login simulation
+│
+├── templates/                   # Jinja2 HTML templates (SecureCorp website)
+│   ├── base.html                # Base template with navigation and JS logging
+│   ├── index.html               # Public landing page
+│   ├── services.html            # Services page
+│   ├── about.html               # About page
+│   ├── blog.html                # Blog page
+│   ├── careers.html             # Careers page
+│   ├── contact.html             # Contact form
+│   ├── login.html               # Generic login page
+│   ├── register.html            # Registration form
+│   ├── forgot-password.html     # Password reset form
+│   ├── customer_login.html      # Customer portal login
+│   ├── customer_dashboard.html  # Customer portal dashboard
+│   ├── admin_login.html         # Admin portal login
+│   └── admin_dashboard.html     # Admin portal dashboard
+│
+├── logs/                        # Persistent data storage
+│   ├── honeypot_logs.json       # Event log store (JSONL format)
+│   ├── blocklist.json           # Blocked IP registry
+│   └── features.csv             # Extracted ML features
+│
+├── models/                      # Serialized ML models
+│   ├── isolation_forest.joblib  # Anomaly detection model
+│   └── rf_attack_classifier.joblib  # Attack classification model
+│
+└── uploads/                     # Uploaded file evidence store
 ```
 
-## Getting Started
+| Directory | Purpose |
+|---|---|
+| `adversary_simulation/` | Automated attack scripts for validating detection rules and stress-testing the honeypot |
+| `templates/` | Jinja2 HTML templates rendering the honeypot website (public pages, customer & admin portals) |
+| `logs/` | Persistent storage for event logs, ML feature exports, and the IP blocklist |
+| `models/` | Serialized scikit-learn models trained on extracted log features for real-time classification |
+| `uploads/` | Evidence collection directory for all user-uploaded files |
+
+---
+
+## ⚙️ How the System Works
+
+### Step 1: Honeypot Captures Activity
+
+The Flask application runs on port **8080** and serves a multi-page corporate website. Every incoming HTTP request triggers the logging pipeline. The `build_log` function constructs a standardized log entry containing the timestamp, source IP, HTTP method, endpoint path, request headers, query parameters, form data, and raw body payload (capped at 2 KB).
+
+### Step 2: Event is Logged and Analyzed
+
+The attack detection engine scans the assembled payload text against:
+
+- **15** SQL injection patterns (compiled regex)
+- **9** cross-site scripting patterns (compiled regex)
+- **Brute force detection** — tracks login attempts per IP within a sliding 5-minute window
+- **File upload inspection** — checks for suspicious extensions (`.exe`, `.bat`, `.sh`, `.php`, `.jsp`, `.asp`, `.cmd`, `.ps1`, `.py`) and content patterns (`<script>`, `<?php`, `#!/`, `import os`, `exec()`, `eval()`)
+
+### Step 3: MITRE ATT&CK Enrichment
+
+Detected attacks are passed through the MITRE mapping module, which assigns a **Technique ID**, **Technique Name**, and **Tactic** category. For example:
+
+| Attack Type | MITRE Technique | Tactic |
+|---|---|---|
+| SQL Injection | T1190 — Exploit Public-Facing Application | Initial Access |
+| Brute Force | T1110 — Brute Force | Credential Access |
+| XSS | T1059.007 — JavaScript | Execution |
+
+### Step 4: Severity Classification
+
+Each event receives a severity level based on its characteristics. The severity level determines both dashboard prioritization and whether automated response actions are triggered.
+
+### Step 5: Automated Response
+
+When an event is classified as **Critical**, the response engine automatically adds the source IP to the persistent blocklist. Subsequent requests from blocked IPs are intercepted by the `before_request` middleware and rejected with a **403** status code. The blocking action triggers an alert notification containing full event context.
+
+### Step 6: Dashboard Visualizes Telemetry
+
+The Streamlit dashboard reads the log store directly, extracts ML features, runs predictions through the **Isolation Forest** (anomaly detection) and **Random Forest** (attack classification) models, and renders interactive visualizations with real-time refresh and export capabilities.
+
+---
+
+## 📊 Dashboard Overview
+
+### Overview Tab
+
+Displays five KPI cards summarizing the current threat posture:
+- **Attacks Today** · **Critical Alerts** · **Unique Attacker IPs** · **Blocked IPs** · **Most Frequent Attack Type**
+
+Below the KPIs: Attacks Over Time line chart, Severity Distribution donut chart, Attack Type Distribution donut, and Event Type Breakdown bar chart.
+
+### Attack Map Tab
+
+Interactive dark-themed world map (Folium + CartoDB Dark Matter tiles) with severity-coded markers. Includes **Top 10 Attacker IPs** and **Top 10 Attacking Countries** bar charts.
+
+### MITRE & Threat Analysis Tab
+
+- Technique Distribution bar chart
+- Attack Type Distribution donut
+- Tactic Breakdown chart (Initial Access, Credential Access, Execution, etc.)
+- Most Targeted Services chart
+- Detail table with technique ID, name, tactic, attack type, severity, and source IP
+
+### Incidents Tab
+
+Structured event investigation interface with four sub-tabs:
+
+| Sub-Tab | Content |
+|---|---|
+| **All Events** | Sortable table with expandable detail rows |
+| **Attacks** | Confirmed SQLi, XSS, and malicious upload events |
+| **Traps** | Trap route access attempts |
+| **Uploads** | File upload events with suspicion flags |
+
+### Response Tab
+
+- Current IP blocklist table
+- Auto-Response Log for Critical events
+- Color-coded Alert History cards (High & Critical severity)
+
+---
+
+## 🛠️ Technologies Used
+
+| Category | Technology |
+|---|---|
+| **Backend Framework** | Flask |
+| **Dashboard Framework** | Streamlit |
+| **Machine Learning** | scikit-learn (Isolation Forest, Random Forest) |
+| **Model Serialization** | joblib |
+| **Data Processing** | pandas |
+| **Interactive Charts** | Plotly |
+| **Geospatial Mapping** | Folium, streamlit-folium |
+| **IP Geolocation** | Custom `geo_lookup` module |
+| **Threat Intelligence** | MITRE ATT&CK Framework (custom mapping) |
+| **HTTP Client** | Requests (adversary simulation) |
+| **Template Engine** | Jinja2 (Flask built-in) |
+| **Data Storage** | JSON Lines (logs), JSON (blocklist), CSV (features) |
+| **Language** | Python 3.8+ |
+
+---
+
+## 🔒 Security Design Philosophy
+
+### Why Honeypots?
+
+Honeypots provide a controlled environment where **all observed activity is inherently suspicious**, eliminating noise from production monitoring. By mimicking a real corporate website with login portals, file upload capabilities, and deliberately exposed administrative endpoints, the system attracts and captures authentic attack behavior — producing high-fidelity threat intelligence without risking production assets.
+
+### Why MITRE ATT&CK?
+
+The MITRE ATT&CK framework provides a **universally recognized taxonomy** for categorizing adversary behavior. Mapping detected attacks to specific Technique IDs and Tactics enables analysts to correlate honeypot observations with documented threat actor campaigns, facilitating communication between security teams and supporting threat hunting workflows.
+
+### Why Automated Response?
+
+Manual incident response introduces latency between detection and containment. Automated IP blocking ensures that Critical severity events trigger **immediate containment** (milliseconds, not minutes). The persistent blocklist and middleware-layer enforcement maintain blocking state across application restarts while preserving full audit trails.
+
+### Why Visualization?
+
+SOC analysts process large volumes of heterogeneous event data under time pressure. The multi-tab dashboard separates **operational summary**, **geospatial context**, **adversary technique analysis**, **detailed investigation**, and **response management** into dedicated workspaces — enabling rapid triage, pattern identification, and prioritized response.
+
+---
+
+## 🚀 Setup and Usage
 
 ### Prerequisites
 
+- **Python 3.8** or later
+- `pip` package manager
+
+### 1️⃣ Clone the Repository
+
 ```bash
-pip install flask pandas scikit-learn joblib streamlit requests
+git clone https://github.com/<your-username>/isproject-main.git
+cd isproject-main
 ```
 
-### Step 1: Start the Honeypot
+### 2️⃣ Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3️⃣ Start the Honeypot Server
 
 ```bash
 python honeypot.py
 ```
 
-Runs on **http://localhost:8080**
+> The Flask server starts on `http://localhost:8080`. All visitor interactions are logged to `logs/honeypot_logs.json`.
 
-### Step 2: Generate Training Data
+### 4️⃣ Generate Training Data
 
 ```bash
 python simulate_traffic.py
 ```
 
-Sends benign browsing, customer logins, SQLi attacks, XSS payloads, brute force attempts, and trap probes.
+> Sends a mix of benign and malicious traffic: normal browsing, login attempts, SQL injection payloads, XSS payloads, brute force sequences, and trap route probes.
 
-### Step 3: Parse Logs & Train Models
+### 5️⃣ Run Adversary Simulations *(Optional)*
+
+```bash
+python adversary_simulation/sqli_sim.py
+python adversary_simulation/brute_force_sim.py
+python adversary_simulation/port_scan_sim.py
+```
+
+### 6️⃣ Parse Logs & Train ML Models
 
 ```bash
 python log_parser.py
 python train_models.py
 ```
 
-### Step 4: Start the SOC Dashboard
+> Produces `logs/features.csv`, `models/isolation_forest.joblib`, and `models/rf_attack_classifier.joblib`.
+
+### 7️⃣ Launch the SOC Dashboard
 
 ```bash
 python -m streamlit run dashboard.py
 ```
 
-Runs on **http://localhost:8501**
+> Dashboard accessible at `http://localhost:8501`. Reads logs from disk and applies both rule-based and ML-based analysis in real time.
 
-### Step 5: Monitor in Real-Time (Optional)
+### 8️⃣ Real-Time Prediction Monitor *(Optional)*
 
 ```bash
 python predict_service.py
 ```
 
-Prints live ML predictions for incoming log entries.
+> Streams live ML predictions for incoming log entries to the console.
 
 ---
 
-## Test Credentials
+## 🔑 Test Credentials
+
+> **⚠️ Note:** These are honeypot credentials for controlled testing. All login attempts are captured, analyzed for attack patterns, and logged with full request context.
 
 ### Customer Portal (`/customer/login`)
 
@@ -120,202 +444,14 @@ Prints live ML predictions for incoming log entries.
 |---|---|
 | `admin@securecorp.com` | `AdminSecure!456` |
 
-> ⚠️ These are **honeypot credentials** — all logins are trapped and logged.
+---
+
+## 📄 License
+
+This project was developed for **educational and research purposes** in cybersecurity threat detection, honeypot design, and security operations center tooling.
 
 ---
 
-## Website Pages
-
-### Public Landing Page
-| Route | Description |
-|---|---|
-| `/` | Home — company description, features, stats |
-| `/services` | Services offered |
-| `/about` | About the company |
-| `/blog` | Company blog |
-| `/careers` | Career listings |
-| `/contact` | Contact form (submissions logged) |
-| `/register` | Registration form (logged) |
-| `/forgot-password` | Password reset (logged) |
-
-### Customer Portal
-| Route | Description |
-|---|---|
-| `/customer/login` | Customer login |
-| `/customer/dashboard` | Dashboard — submit queries, upload files, view responses |
-| `/customer/query` | POST — submit a query |
-| `/customer/upload` | POST — upload PDF/documents |
-| `/customer/logout` | Logout |
-
-### Admin Portal
-| Route | Description |
-|---|---|
-| `/admin/login` | Admin login |
-| `/admin/dashboard` | View customer queries & uploaded files |
-| `/admin/logout` | Logout |
-
----
-
-## Honeypot Features
-
-### Trap Routes
-
-These routes exist solely to catch attackers probing for vulnerabilities. They **log access and deny entry**.
-
-| Route | Response | Severity |
-|---|---|---|
-| `/admin-panel` | 403 Forbidden | High |
-| `/debug-console` | 403 Forbidden | High |
-| `/wp-admin` | 404 Not Found | High |
-| `/phpmyadmin` | 404 Not Found | High |
-| `/.env` | 404 Not Found | Critical |
-
-### What Gets Logged
-
-- ✅ All page views and navigation
-- ✅ Login attempts (success and failure)
-- ✅ Form submissions (contact, registration, queries)
-- ✅ File uploads (with content scanning)
-- ✅ Client-side interactions (clicks, key sequences, mouse patterns via JS)
-- ✅ API requests
-- ✅ Brute force detection (>5 failed logins / 5 min from same IP)
-
----
-
-## Attack Detection
-
-### SQL Injection (15 patterns)
-Detects: `' OR 1=1--`, `UNION SELECT`, `DROP TABLE`, `'; DELETE`, `admin'--`, `1=1`, `sleep()`, `benchmark()`, and more.
-
-### Cross-Site Scripting (9 patterns)
-Detects: `<script>`, `javascript:`, `onerror=`, `onload=`, `<svg>`, `<iframe>`, `eval()`, `document.cookie`, `alert()`.
-
-### Brute Force Login
-Tracks failed login attempts per IP. Flags when >5 attempts occur within a 5-minute window.
-
-### Malicious File Uploads
-- **Extension check**: `.exe`, `.bat`, `.sh`, `.php`, `.jsp`, `.asp`, `.cmd`, `.ps1`, `.py`
-- **Content scan**: Detects `<script>`, `<?php`, `#!/`, `import os`, `exec()`, `eval()` in first 4KB
-
----
-
-## Log Format
-
-All logs are appended to `logs/honeypot_logs.json` (one JSON object per line):
-
-```json
-{
-  "timestamp": "2026-02-17T05:01:23.456789+00:00",
-  "ip": "127.0.0.1",
-  "endpoint": "/customer/login",
-  "method": "POST",
-  "event_type": "attack_detected",
-  "severity": "critical",
-  "details": {
-    "portal": "customer",
-    "username": "' OR 1=1--",
-    "attack_type": "SQL Injection",
-    "attack_patterns": ["' OR 1=1"]
-  },
-  "headers": {"User-Agent": "Mozilla/5.0 ..."},
-  "args": {},
-  "form": {"username": "' OR 1=1--", "password": "pass"},
-  "data": "",
-  "predicted_class": "sqli",
-  "is_anomaly": true
-}
-```
-
-### Event Types
-
-| Event Type | Description |
-|---|---|
-| `page_view` | Normal page navigation |
-| `login_attempt` | Login attempt (any portal) |
-| `login_success` | Successful login |
-| `admin_login_attempt` | Admin login attempt |
-| `brute_force_detected` | IP exceeded login threshold |
-| `attack_detected` | SQLi / XSS detected |
-| `form_submit` | Contact or other form submission |
-| `query_submit` | Customer query submission |
-| `file_upload` | Clean file upload |
-| `suspicious_upload` | File with suspicious content/extension |
-| `honeypot_trap` | Trap route accessed |
-| `registration_attempt` | New user registration |
-| `password_reset` | Password reset request |
-| `logout` | User logout |
-| `client_log` | Client-side JS interaction log |
-
-### Severity Levels
-
-| Level | Color | Meaning |
-|---|---|---|
-| `low` | 🟢 Green | Normal activity |
-| `medium` | 🟡 Yellow | Suspicious but not confirmed |
-| `high` | 🟠 Orange | Likely attack / trap hit |
-| `critical` | 🔴 Red | Confirmed attack / malicious upload |
-
----
-
-## SOC Dashboard
-
-The Streamlit dashboard (`dashboard.py`) provides:
-
-- **KPI metrics**: Total events, attacks, anomalies, trap hits, brute force, uploads
-- **Charts**: Event type distribution, severity breakdown, ML classification
-- **Tabbed views**: All Events, Attacks, Traps, Uploads
-- **Filters**: By severity, event type, anomalies only
-- **Export**: Download features CSV or raw logs JSON
-
----
-
-## File Structure
-
-```
-isproject-main/
-├── honeypot.py              # Flask honeypot server (port 8080)
-├── dashboard.py             # Streamlit SOC dashboard (port 8501)
-├── log_parser.py            # Feature extraction from logs
-├── train_models.py          # ML model training (IsolationForest + RF)
-├── predict_service.py       # Real-time prediction monitor
-├── simulate_traffic.py      # Traffic generator for testing
-├── templates/
-│   ├── base.html            # Base template (nav, CSS, JS logging)
-│   ├── index.html           # Landing page
-│   ├── services.html        # Services page
-│   ├── about.html           # About page
-│   ├── blog.html            # Blog page
-│   ├── careers.html         # Careers page
-│   ├── contact.html         # Contact form
-│   ├── login.html           # Legacy login (redirects to customer)
-│   ├── register.html        # Registration form
-│   ├── forgot-password.html # Password reset
-│   ├── customer_login.html  # Customer portal login
-│   ├── customer_dashboard.html # Customer dashboard
-│   ├── admin_login.html     # Admin portal login
-│   └── admin_dashboard.html # Admin dashboard
-├── logs/
-│   ├── honeypot_logs.json   # All honeypot logs (JSONL)
-│   └── features.csv         # Extracted features for ML
-├── models/
-│   ├── isolation_forest.joblib  # Anomaly detection model
-│   └── rf_attack_classifier.joblib  # Attack classification model
-└── uploads/                 # Uploaded files (evidence collection)
-```
-
----
-
-## Workflow
-
-```
-1. Start honeypot        →  python honeypot.py
-2. Generate traffic      →  python simulate_traffic.py
-3. Parse logs            →  python log_parser.py
-4. Train models          →  python train_models.py
-5. Start dashboard       →  streamlit run dashboard.py
-6. (Optional) Monitor    →  python predict_service.py
-```
-
----
-
-© 2026 SecureCorp — AI-Powered Honeypot System
+<p align="center">
+  Made with ❤️ for Cybersecurity Research
+</p>
