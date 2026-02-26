@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "title": "Brute Force / Credential Stuffing \u2014 127.0.0.1",
+    "severity": "high",
+    "status": "Open",
+    "description": "Attack: High-frequency authentication attempts against login endpoints\nImpact: Account compromise through weak password discovery, service degradation from authentication system overload, and potential lateral movement if credentials are reused across systems.",
+    "log_index": 22,
+    "created_at": "2026-02-26T18:19:39.272493+00:00",
+    "updated_at": "2026-02-26T18:19:39.272522+00:00",
+    "threat_type": "Brute Force / Credential Stuffing",
+    "risk_score": 75,
+    "mitre_technique": "",
+    "mitigation_steps": [
+      "Block the attacking IP immediately",
+      "Force password resets for targeted accounts",
+      "Review login logs for successful unauthorized access",
+      "Enable account lockout after failed attempts",
+      "Verify MFA is enforced on all accounts"
+    ]
+  }
+]

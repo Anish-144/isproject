@@ -7,364 +7,231 @@ from streamlit_folium import st_folium
 from log_parser import extract_features, LOGPATH
 from datetime import datetime, date, timedelta
 from geo_lookup import geolocate
+from threat_intel import analyze_threat, get_all_mitigations
+from case_manager import (get_cases, create_case, update_case_status,
+                          generate_case_pdf, generate_executive_pdf, generate_mitigation_pdf)
 
-# ───────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
-# ───────────────────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="SecureCorp SOC Dashboard",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# ═══════════════════════════════════════════════════════════════════════════════
+st.set_page_config(page_title="SecureCorp AI-SIEM", page_icon="🛡️",
+                   layout="wide", initial_sidebar_state="expanded")
 
-# ───────────────────────────────────────────────────────────────────────────────
-# DARK SOC THEME — CSS INJECTION
-# ───────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENTERPRISE DESIGN SYSTEM — CSS
+# ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-/* ── Global reset ──────────────────────────────────────────────────────── */
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
-.stApp {
-    background: #0a0a0f;
-    color: #c9d1d9;
-}
+/* ── Application Shell ────────────────────────────────────────────────── */
+.stApp { background: #0B1220; color: #e2e8f0; }
 
-/* ── Header area ───────────────────────────────────────────────────────── */
-.soc-header {
-    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
-    border: 1px solid #21262d;
-    border-radius: 12px;
-    padding: 24px 32px;
-    margin-bottom: 24px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
+/* ── Top Command Bar ──────────────────────────────────────────────────── */
+.cmd-bar {
+    background: linear-gradient(180deg, #111827 0%, #0F172A 100%);
+    border-bottom: 1px solid #1e293b;
+    padding: 12px 28px; display: flex; align-items: center; justify-content: space-between;
+    margin: -1rem -1rem 0 -1rem; position: sticky; top: 0; z-index: 999;
 }
-.soc-header h1 {
-    margin: 0;
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #e6edf3;
-    letter-spacing: -0.5px;
+.cmd-bar .brand { display: flex; align-items: center; gap: 12px; }
+.cmd-bar .brand-icon { font-size: 1.5rem; }
+.cmd-bar .brand-name { font-size: 1.05rem; font-weight: 700; color: #f1f5f9; letter-spacing: -0.3px; }
+.cmd-bar .brand-tag {
+    font-size: 0.6rem; background: #3b82f620; color: #60a5fa; padding: 2px 8px;
+    border-radius: 4px; border: 1px solid #3b82f640; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
 }
-.soc-header .subtitle {
-    color: #7d8590;
-    font-size: 0.85rem;
-    margin-top: 4px;
+.cmd-bar .cmd-right { display: flex; align-items: center; gap: 16px; }
+.cmd-bar .status-pill {
+    display: flex; align-items: center; gap: 6px; font-size: 0.72rem;
+    color: #94a3b8; background: #1e293b; padding: 5px 12px; border-radius: 6px; border: 1px solid #334155;
 }
-.soc-header .live-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: #3fb950;
-    box-shadow: 0 0 8px #3fb950;
-    animation: pulse-dot 2s infinite;
-    display: inline-block;
-    margin-right: 6px;
+.cmd-bar .status-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #22c55e;
+    box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite;
 }
-@keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+.cmd-bar .alert-badge {
+    position: relative; font-size: 1.1rem; cursor: pointer; color: #94a3b8;
+}
+.cmd-bar .alert-badge .count {
+    position: absolute; top: -4px; right: -6px; background: #ef4444; color: white;
+    font-size: 0.55rem; font-weight: 700; padding: 1px 4px; border-radius: 8px; min-width: 14px; text-align: center;
 }
 
-/* ── KPI Cards ─────────────────────────────────────────────────────────── */
+/* ── Page Header ──────────────────────────────────────────────────────── */
+.page-header { margin: 20px 0 16px; }
+.page-header h2 { font-size: 1.45rem; font-weight: 700; color: #f1f5f9; margin: 0 0 4px; }
+.page-header .subtitle { font-size: 0.82rem; color: #64748b; font-weight: 400; }
+
+/* ── Horizontal Filter Bar ────────────────────────────────────────────── */
+.filter-bar {
+    background: #111827; border: 1px solid #1e293b; border-radius: 10px;
+    padding: 12px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;
+}
+
+/* ── KPI Cards ────────────────────────────────────────────────────────── */
 .kpi-card {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 10px;
-    padding: 20px 16px;
-    text-align: center;
-    transition: border-color 0.2s, transform 0.15s;
+    background: linear-gradient(135deg, #111827 0%, #0F172A 100%);
+    border: 1px solid #1e293b; border-radius: 12px; padding: 20px 18px;
+    transition: all 0.25s ease; position: relative; overflow: hidden;
 }
-.kpi-card:hover {
-    border-color: #58a6ff;
-    transform: translateY(-2px);
-}
-.kpi-value {
-    font-size: 2.2rem;
-    font-weight: 700;
-    margin: 8px 0 4px;
-    line-height: 1;
-}
-.kpi-label {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #7d8590;
-    font-weight: 600;
-}
-.kpi-accent-red    .kpi-value { color: #f85149; }
-.kpi-accent-orange .kpi-value { color: #d29922; }
-.kpi-accent-blue   .kpi-value { color: #58a6ff; }
-.kpi-accent-green  .kpi-value { color: #3fb950; }
-.kpi-accent-purple .kpi-value { color: #bc8cff; }
+.kpi-card:hover { border-color: #334155; transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+.kpi-card .kpi-icon { font-size: 1.3rem; margin-bottom: 8px; opacity: 0.8; }
+.kpi-card .kpi-value { font-size: 2.1rem; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+.kpi-card .kpi-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1.2px; color: #64748b; font-weight: 600; }
+.kpi-card .kpi-trend { font-size: 0.7rem; color: #64748b; margin-top: 4px; }
+.kpi-accent-red    { border-left: 3px solid #ef4444; } .kpi-accent-red .kpi-value { color: #ef4444; }
+.kpi-accent-amber  { border-left: 3px solid #f59e0b; } .kpi-accent-amber .kpi-value { color: #f59e0b; }
+.kpi-accent-blue   { border-left: 3px solid #3b82f6; } .kpi-accent-blue .kpi-value { color: #3b82f6; }
+.kpi-accent-green  { border-left: 3px solid #22c55e; } .kpi-accent-green .kpi-value { color: #22c55e; }
+.kpi-accent-purple { border-left: 3px solid #a855f7; } .kpi-accent-purple .kpi-value { color: #a855f7; }
 
-.kpi-accent-red    { border-left: 3px solid #f85149; }
-.kpi-accent-orange { border-left: 3px solid #d29922; }
-.kpi-accent-blue   { border-left: 3px solid #58a6ff; }
-.kpi-accent-green  { border-left: 3px solid #3fb950; }
-.kpi-accent-purple { border-left: 3px solid #bc8cff; }
-
-/* ── Section Headers ───────────────────────────────────────────────────── */
-.section-header {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #e6edf3;
-    margin: 28px 0 14px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #21262d;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* ── Section Headers ──────────────────────────────────────────────────── */
+.section-hdr {
+    font-size: 0.95rem; font-weight: 600; color: #e2e8f0; margin: 24px 0 12px;
+    padding-bottom: 8px; border-bottom: 1px solid #1e293b;
+    display: flex; align-items: center; gap: 8px;
 }
 
-/* ── Chart container ───────────────────────────────────────────────────── */
-.chart-box {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 16px;
+/* ── Cards / Panels ───────────────────────────────────────────────────── */
+.panel {
+    background: #111827; border: 1px solid #1e293b; border-radius: 12px;
+    padding: 18px; margin-bottom: 16px; transition: border-color 0.2s;
 }
+.panel:hover { border-color: #334155; }
+.panel-header { font-weight: 600; color: #f1f5f9; font-size: 0.88rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
 
-/* ── Severity badges ───────────────────────────────────────────────────── */
+/* ── Alert Item ───────────────────────────────────────────────────────── */
+.alert-item {
+    background: #0F172A; border: 1px solid #1e293b; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 6px; transition: all 0.2s;
+    display: flex; align-items: center; gap: 10px;
+}
+.alert-item:hover { border-color: #334155; background: #111827; }
+.alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.alert-dot-critical { background: #ef4444; box-shadow: 0 0 6px #ef444480; }
+.alert-dot-high { background: #f59e0b; box-shadow: 0 0 6px #f59e0b80; }
+.alert-dot-medium { background: #3b82f6; }
+.alert-dot-low { background: #22c55e; }
+.alert-info { flex: 1; }
+.alert-info .alert-type { font-weight: 600; font-size: 0.8rem; color: #e2e8f0; }
+.alert-info .alert-meta { font-size: 0.7rem; color: #64748b; margin-top: 2px; }
+
+/* ── Severity badges ──────────────────────────────────────────────────── */
 .sev-badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    display: inline-block; padding: 2px 10px; border-radius: 6px;
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
 }
-.sev-critical { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
-.sev-high     { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
-.sev-medium   { background: #58a6ff22; color: #58a6ff; border: 1px solid #58a6ff44; }
-.sev-low      { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+.sev-critical { background: #ef444420; color: #ef4444; border: 1px solid #ef444440; }
+.sev-high { background: #f59e0b20; color: #f59e0b; border: 1px solid #f59e0b40; }
+.sev-medium { background: #3b82f620; color: #3b82f6; border: 1px solid #3b82f640; }
+.sev-low { background: #22c55e20; color: #22c55e; border: 1px solid #22c55e40; }
 
-/* ── Map container ─────────────────────────────────────────────────────── */
-.map-container {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 10px;
-    padding: 8px;
-    overflow: hidden;
-}
+/* ── Risk badges ──────────────────────────────────────────────────────── */
+.risk-badge { display: inline-block; padding: 4px 14px; border-radius: 8px; font-weight: 700; font-size: 0.82rem; }
+.risk-red { background: #ef444420; color: #ef4444; border: 1px solid #ef444440; }
+.risk-yellow { background: #f59e0b20; color: #f59e0b; border: 1px solid #f59e0b40; }
+.risk-green { background: #22c55e20; color: #22c55e; border: 1px solid #22c55e40; }
 
-/* ── Event rows ────────────────────────────────────────────────────────── */
-.event-row {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 6px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 0.82rem;
-    transition: border-color 0.2s;
-}
-.event-row:hover {
-    border-color: #30363d;
-}
+/* ── Map container ────────────────────────────────────────────────────── */
+.map-wrap { background: #111827; border: 1px solid #1e293b; border-radius: 12px; padding: 8px; overflow: hidden; }
 
-/* ── Sidebar ───────────────────────────────────────────────────────────── */
-section[data-testid="stSidebar"] {
-    background: #0d1117;
-    border-right: 1px solid #21262d;
+/* ── Response card ────────────────────────────────────────────────────── */
+.resp-card {
+    background: #0F172A; border: 1px solid #1e293b; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 8px; transition: border-color 0.2s;
 }
+.resp-card:hover { border-color: #334155; }
+.resp-card .rc-title { font-weight: 600; color: #f1f5f9; font-size: 0.85rem; margin-bottom: 4px; }
+.resp-card .rc-meta { color: #64748b; font-size: 0.73rem; }
+
+/* ── AI Insight Widget ────────────────────────────────────────────────── */
+.ai-widget {
+    background: linear-gradient(135deg, #0F172A 0%, #111827 50%, #0F172A 100%);
+    border: 1px solid #3b82f630; border-radius: 12px; padding: 20px;
+    position: relative; overflow: hidden;
+}
+.ai-widget::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, #3b82f6, #a855f7, #3b82f6); opacity: 0.6;
+}
+.ai-widget .ai-title { font-weight: 700; font-size: 0.9rem; color: #f1f5f9; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.ai-widget .ai-summary { font-size: 0.82rem; color: #94a3b8; line-height: 1.5; margin-bottom: 12px; }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────── */
+section[data-testid="stSidebar"] { background: #0F172A; border-right: 1px solid #1e293b; }
 section[data-testid="stSidebar"] .stMarkdown h1,
 section[data-testid="stSidebar"] .stMarkdown h2,
-section[data-testid="stSidebar"] .stMarkdown h3 {
-    color: #e6edf3;
-}
+section[data-testid="stSidebar"] .stMarkdown h3 { color: #f1f5f9; }
+section[data-testid="stSidebar"] .stMarkdown h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; color: #475569; font-weight: 600; margin: 16px 0 6px; }
 
-/* ── Streamlit metric overrides ────────────────────────────────────────── */
-[data-testid="stMetric"] {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 10px;
-    padding: 16px;
-}
-[data-testid="stMetricValue"] {
-    font-size: 1.8rem;
-    font-weight: 700;
-}
-
-/* ── Tab styling ───────────────────────────────────────────────────────── */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 4px;
-    background: #161b22;
-    border-radius: 8px;
-    padding: 4px;
-    border: 1px solid #21262d;
-}
-.stTabs [data-baseweb="tab"] {
-    background: transparent;
-    border-radius: 6px;
-    color: #7d8590;
-    font-weight: 500;
-    font-size: 0.85rem;
-    padding: 8px 16px;
-    transition: all 0.2s ease;
-}
-.stTabs [data-baseweb="tab"]:hover {
-    color: #c9d1d9;
-    background: #21262d50;
-}
-.stTabs [aria-selected="true"] {
-    background: #21262d;
-    color: #e6edf3;
-}
-
-/* ── Scrollbar ─────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0d1117; }
-::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
-
-/* ── Expander ──────────────────────────────────────────────────────────── */
-.streamlit-expanderHeader {
-    background: #161b22;
-    border-radius: 8px;
-}
-
-/* ── Info card for response tab ────────────────────────────────────────── */
-.response-card {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 10px;
-    padding: 16px 20px;
-    margin-bottom: 10px;
-    transition: border-color 0.2s;
-}
-.response-card:hover {
-    border-color: #30363d;
-}
-.response-card .rc-title {
-    font-weight: 600;
-    color: #e6edf3;
-    font-size: 0.9rem;
-    margin-bottom: 4px;
-}
-.response-card .rc-meta {
-    color: #7d8590;
-    font-size: 0.78rem;
-}
+/* ── Streamlit overrides ──────────────────────────────────────────────── */
+[data-testid="stMetric"] { background: #111827; border: 1px solid #1e293b; border-radius: 10px; padding: 14px; }
+[data-testid="stMetricValue"] { font-size: 1.6rem; font-weight: 700; }
+.stTabs [data-baseweb="tab-list"] { gap:4px; background:#111827; border-radius:8px; padding:4px; border:1px solid #1e293b; }
+.stTabs [data-baseweb="tab"] { background:transparent; border-radius:6px; color:#64748b; font-weight:500; font-size:0.8rem; padding:7px 14px; }
+.stTabs [data-baseweb="tab"]:hover { color:#e2e8f0; background:#1e293b50; }
+.stTabs [aria-selected="true"] { background:#1e293b; color:#f1f5f9; }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #0B1220; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+.streamlit-expanderHeader { background: #111827; border-radius: 8px; }
+div[data-testid="stExpander"] { border: 1px solid #1e293b; border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ───────────────────────────────────────────────────────────────────────────────
-# HEADER
-# ───────────────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="soc-header">
-    <div>
-        <h1>🛡️ SecureCorp — SOC Monitoring Console</h1>
-        <div class="subtitle"><span class="live-dot"></span>Live   •   MITRE ATT&CK Enriched   •   Automated Response Active</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ───────────────────────────────────────────────────────────────────────────────
-# HELPER FUNCTIONS
-# ───────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
 SEVERITY_BADGE = {"low": "🟢", "medium": "🟡", "high": "🟠", "critical": "🔴"}
-SEVERITY_COLORS = {"critical": "red", "high": "orange", "medium": "blue", "low": "green"}
-
-
-def get_severity_icon(severity):
-    return SEVERITY_BADGE.get(str(severity).lower(), "⚪")
-
-
+SEVERITY_COLORS = {"critical": "#ef4444", "high": "#f59e0b", "medium": "#3b82f6", "low": "#22c55e"}
+def get_severity_icon(s): return SEVERITY_BADGE.get(str(s).lower(), "⚪")
+def risk_class(score):
+    if score >= 70: return "risk-red"
+    if score >= 40: return "risk-yellow"
+    return "risk-green"
 def format_ts(ts):
-    try:
-        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return str(ts)
-
-
+    try: return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception: return str(ts)
 def load_logs():
     rows = []
     try:
         with open(LOGPATH) as f:
             for line in f:
                 line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rows.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-    except FileNotFoundError:
-        return []
+                if not line: continue
+                try: rows.append(json.loads(line))
+                except json.JSONDecodeError: continue
+    except FileNotFoundError: pass
     return rows
-
-
 def load_blocklist():
-    bl_path = os.path.join("logs", "blocklist.json")
-    if not os.path.exists(bl_path):
-        return {}
+    p = os.path.join("logs", "blocklist.json")
+    if not os.path.exists(p): return {}
     try:
-        with open(bl_path) as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return {}
+        with open(p) as f: return json.load(f)
+    except: return {}
 
-
-# ───────────────────────────────────────────────────────────────────────────────
-# SIDEBAR — Filters & Controls
-# ───────────────────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("### 🔧 Controls")
-    show_raw = st.checkbox("Show raw log details", value=True)
-    filter_anomalies = st.checkbox("Only anomalies", value=False)
-    filter_severity = st.selectbox("Filter by severity", ["all", "low", "medium", "high", "critical"])
-    filter_event = st.selectbox("Filter by event type", [
-        "all", "attack_detected", "login_attempt", "honeypot_trap",
-        "brute_force_detected", "suspicious_upload", "page_view",
-        "form_submit", "query_submit", "file_upload", "client_log",
-    ])
-
-    st.markdown("---")
-    st.markdown("### 📅 Date Range")
-    date_from = st.date_input("From", value=date.today() - timedelta(days=30))
-    date_to = st.date_input("To", value=date.today())
-
-    st.markdown("---")
-    st.markdown("### 🗺️ MITRE Filter")
-
-    refresh = st.button("🔄 Refresh Data")
-
-    st.markdown("---")
-    st.markdown("### 📥 Export")
-
-# ───────────────────────────────────────────────────────────────────────────────
-# LOAD MODELS
-# ───────────────────────────────────────────────────────────────────────────────
-model_iso = None
-model_rf = None
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOAD DATA + MODELS
+# ═══════════════════════════════════════════════════════════════════════════════
+model_iso = model_rf = None
 try:
     model_iso = joblib.load(os.path.join("models", "isolation_forest.joblib"))
     model_rf = joblib.load(os.path.join("models", "rf_attack_classifier.joblib"))
 except Exception:
-    st.sidebar.warning("⚠️ ML models not loaded — run `train_models.py`")
+    pass
 
-# ───────────────────────────────────────────────────────────────────────────────
-# DATA LOADING & PROCESSING
-# ───────────────────────────────────────────────────────────────────────────────
 logs = load_logs()
+blocklist = load_blocklist()
+
 if not logs:
     st.info("No logs found. Start the honeypot (`python honeypot.py`) and generate traffic.")
     st.stop()
 
 feats = [extract_features(r) for r in logs]
 fdf = pd.DataFrame(feats).fillna(0)
-
 fdf["stored_class"] = [r.get("predicted_class", "benign") for r in logs]
 fdf["stored_anomaly"] = [r.get("is_anomaly", False) for r in logs]
 fdf["event_type"] = [r.get("event_type", "request") for r in logs]
@@ -373,627 +240,447 @@ fdf["mitre_id"] = [r.get("mitre_id", "") for r in logs]
 fdf["mitre_name"] = [r.get("mitre_name", "") for r in logs]
 fdf["mitre_tactic"] = [r.get("mitre_tactic", "") for r in logs]
 fdf["attack_type"] = [r.get("details", {}).get("attack_type", "") for r in logs]
-
-if "time" in fdf.columns:
-    fdf["time"] = pd.to_datetime(fdf["time"], errors="coerce")
-
+if "time" in fdf.columns: fdf["time"] = pd.to_datetime(fdf["time"], errors="coerce")
 fdf["method_code"] = fdf["method"].map({"GET": 0, "POST": 1}).fillna(2).astype(int)
-
-feature_cols = ["path_len", "ua_len", "data_len", "count_sql_tokens",
-                "count_xss_tokens", "num_params", "method_code", "has_sql_special_chars"]
+feature_cols = ["path_len", "ua_len", "data_len", "count_sql_tokens", "count_xss_tokens", "num_params", "method_code", "has_sql_special_chars"]
 for col in feature_cols:
-    if col not in fdf.columns:
-        fdf[col] = 0
+    if col not in fdf.columns: fdf[col] = 0
 X = fdf[feature_cols]
+if model_rf:
+    try: fdf["pred"] = model_rf.predict(X)
+    except: fdf["pred"] = 0
+else: fdf["pred"] = 0
+if model_iso:
+    try: fdf["anomaly"] = model_iso.predict(X)
+    except: fdf["anomaly"] = 1
+else: fdf["anomaly"] = 1
 
-# ML predictions
-if model_rf is not None:
-    try:
-        fdf["pred"] = model_rf.predict(X)
-    except Exception as e:
-        st.sidebar.error(f"RF prediction error: {e}")
-        fdf["pred"] = 0
-else:
-    fdf["pred"] = 0
-
-if model_iso is not None:
-    try:
-        fdf["anomaly"] = model_iso.predict(X)
-    except Exception as e:
-        st.sidebar.error(f"ISO prediction error: {e}")
-        fdf["anomaly"] = 1
-else:
-    fdf["anomaly"] = 1
-
-# ── MITRE filter in sidebar (needs data loaded first) ───────────────────────
-mitre_options = sorted(fdf.loc[fdf["mitre_id"] != "", "mitre_id"].unique().tolist())
-with st.sidebar:
-    filter_mitre = st.selectbox("MITRE Technique", ["all"] + mitre_options)
-
-# ── Apply filters ───────────────────────────────────────────────────────────
-view = fdf.copy()
-if filter_anomalies:
-    view = view[view["anomaly"] == -1]
-if filter_severity != "all":
-    view = view[view["severity"] == filter_severity]
-if filter_event != "all":
-    view = view[view["event_type"] == filter_event]
-if filter_mitre != "all":
-    view = view[view["mitre_id"] == filter_mitre]
-# Date filter
-if "time" in view.columns and pd.api.types.is_datetime64_any_dtype(view.get("time")):
-    time_mask = view["time"].notna()
-    if time_mask.any():
-        date_from_dt = pd.Timestamp(date_from, tz="UTC")
-        date_to_dt = pd.Timestamp(date_to, tz="UTC") + pd.Timedelta(days=1)
-        view = view[~time_mask | ((view["time"] >= date_from_dt) & (view["time"] < date_to_dt))]
-
-# ── Precompute KPIs ─────────────────────────────────────────────────────────
-attack_mask = fdf["stored_class"].isin(["sqli", "xss", "malicious_upload"]) | fdf["event_type"].isin(["attack_detected", "brute_force_detected"])
+attack_mask = fdf["stored_class"].isin(["sqli","xss","malicious_upload"]) | fdf["event_type"].isin(["attack_detected","brute_force_detected"])
 attacks_total = int(attack_mask.sum())
-
-today_str = date.today().isoformat()
 if "time" in fdf.columns and pd.api.types.is_datetime64_any_dtype(fdf.get("time")):
     today_mask = fdf["time"].dt.date == date.today()
     attacks_today = int((attack_mask & today_mask).sum()) if today_mask.any() else attacks_total
-else:
-    attacks_today = attacks_total
-
+else: attacks_today = attacks_total
 critical_alerts = int((fdf["severity"] == "critical").sum())
-
-if "ip" in fdf.columns:
-    unique_attacker_ips = int(fdf.loc[attack_mask, "ip"].nunique()) if attack_mask.any() else 0
-else:
-    unique_attacker_ips = 0
-
-blocklist = load_blocklist()
+unique_ips = int(fdf.loc[attack_mask, "ip"].nunique()) if "ip" in fdf.columns and attack_mask.any() else 0
 blocked_count = len(blocklist)
-
 freq_attack = "—"
-if not fdf.loc[fdf["attack_type"] != "", "attack_type"].empty:
-    freq_attack = fdf.loc[fdf["attack_type"] != "", "attack_type"].value_counts().index[0]
+if not fdf.loc[fdf["attack_type"]!="","attack_type"].empty:
+    freq_attack = fdf.loc[fdf["attack_type"]!="","attack_type"].value_counts().index[0]
 
-# ── Build geo data (shared by Attack Map tab) ───────────────────────────────
-attack_events = fdf[attack_mask].copy()
+# Geo data
 geo_rows = []
-if not attack_events.empty:
-    for idx, row in attack_events.iterrows():
-        ip = str(row.get("ip", "127.0.0.1"))
-        event_hash = f"{idx}-{row.get('event_type', '')}-{row.get('attack_type', '')}"
-        loc = geolocate(ip, event_hash)
-        geo_rows.append({
-            "ip": ip,
-            "lat": loc["lat"],
-            "lon": loc["lon"],
-            "country": loc["country"],
-            "city": loc["city"],
-            "severity": str(row.get("severity", "low")),
-            "attack_type": str(row.get("attack_type", "Unknown")),
-            "event_type": str(row.get("event_type", "")),
-            "mitre_id": str(row.get("mitre_id", "")),
-            "mitre_name": str(row.get("mitre_name", "")),
-        })
+ae = fdf[attack_mask].copy()
+if not ae.empty:
+    for idx, row in ae.iterrows():
+        ip = str(row.get("ip","127.0.0.1"))
+        loc = geolocate(ip, f"{idx}-{row.get('event_type','')}")
+        geo_rows.append({"ip":ip,"lat":loc["lat"],"lon":loc["lon"],"country":loc["country"],"city":loc["city"],
+                         "severity":str(row.get("severity","low")),"attack_type":str(row.get("attack_type","Unknown")),
+                         "event_type":str(row.get("event_type","")),"mitre_id":str(row.get("mitre_id","")),"mitre_name":str(row.get("mitre_name",""))})
 
-# ── Sidebar export buttons ──────────────────────────────────────────────────
-with st.sidebar:
-    csv_buf = io.StringIO()
-    fdf.to_csv(csv_buf, index=False)
-    st.download_button("📄 Download Features CSV", csv_buf.getvalue(),
-                       file_name="securecorp_features.csv", mime="text/csv")
-    log_str = json.dumps(logs, indent=2, default=str)
-    st.download_button("📋 Download Raw Logs JSON", log_str,
-                       file_name="securecorp_logs.json", mime="application/json")
-
-# ── Shared Plotly theme ─────────────────────────────────────────────────────
-PLOTLY_LAYOUT = dict(
-    paper_bgcolor="#161b22",
-    plot_bgcolor="#161b22",
-    font=dict(family="Inter, sans-serif", color="#c9d1d9", size=12),
-    margin=dict(l=20, r=20, t=40, b=20),
-    legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
-)
-COLOR_SEQ = ["#f85149", "#d29922", "#58a6ff", "#3fb950", "#bc8cff",
-             "#f778ba", "#79c0ff", "#ffa657", "#56d364", "#db61a2"]
+PLOTLY_LAYOUT = dict(paper_bgcolor="#111827", plot_bgcolor="#111827",
+    font=dict(family="Inter, sans-serif", color="#e2e8f0", size=12),
+    margin=dict(l=20, r=20, t=40, b=20), legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=11)))
+COLOR_SEQ = ["#ef4444","#f59e0b","#3b82f6","#22c55e","#a855f7","#ec4899","#06b6d4","#f97316","#10b981","#8b5cf6"]
 labels = {0: "benign", 1: "sqli", 2: "xss"}
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MAIN TABS
+# TOP COMMAND BAR
 # ═══════════════════════════════════════════════════════════════════════════════
-tab_overview, tab_map, tab_mitre, tab_incidents, tab_response = st.tabs([
-    "📊 Overview",
-    "🌐 Attack Map",
-    "🗺️ MITRE & Threats",
-    "🔍 Incidents",
-    "🚫 Response",
-])
+alert_count = critical_alerts
+ml_status = "Online" if model_rf else "Offline"
+st.markdown(f"""
+<div class="cmd-bar">
+    <div class="brand">
+        <span class="brand-icon">🛡️</span>
+        <span class="brand-name">SecureCorp AI-SIEM</span>
+        <span class="brand-tag">Lab Mode</span>
+    </div>
+    <div class="cmd-right">
+        <div class="status-pill"><span class="status-dot"></span> ML Models: {ml_status}</div>
+        <div class="status-pill">🎯 MITRE ATT&CK Active</div>
+        <div class="alert-badge">🔔<span class="count">{alert_count}</span></div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — OVERVIEW
+# SIDEBAR — Sectioned Navigation (single radio for proper routing)
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab_overview:
-    st.markdown('<div class="section-header">📈 Key Performance Indicators</div>',
-                unsafe_allow_html=True)
+NAV_ITEMS = [
+    "📊 Dashboard", "🐝 Live Honeypot Logs",
+    "🧠 AI Threat Analysis", "🛡 Mitigation Center", "📂 Case Management",
+    "📊 Reports",
+]
+with st.sidebar:
+    st.markdown("### 🛡️ SecureCorp")
+    st.caption("AI-Powered SIEM Platform")
+    st.markdown("---")
+    page = st.radio("Navigation", NAV_ITEMS, label_visibility="collapsed", key="nav_main")
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# HORIZONTAL FILTER BAR (on applicable pages)
+# ═══════════════════════════════════════════════════════════════════════════════
+def render_filters():
+    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.5,1.5,1,1,1,1])
+    with fc1: f_sev = st.selectbox("Severity", ["all","low","medium","high","critical"], key="f_sev")
+    with fc2: f_evt = st.selectbox("Event Type", ["all","attack_detected","login_attempt","honeypot_trap","brute_force_detected","suspicious_upload","page_view","form_submit","query_submit","file_upload","client_log"], key="f_evt")
+    with fc3: f_from = st.date_input("From", value=date.today()-timedelta(days=30), key="f_from")
+    with fc4: f_to = st.date_input("To", value=date.today(), key="f_to")
+    with fc5: f_anom = st.checkbox("Only anomalies", key="f_anom")
+    with fc6: f_raw = st.checkbox("Show details", value=True, key="f_raw")
+    return f_sev, f_evt, f_from, f_to, f_anom, f_raw
+
+def apply_filters(df, f_sev, f_evt, f_from, f_to, f_anom):
+    v = df.copy()
+    if f_anom: v = v[v["anomaly"] == -1]
+    if f_sev != "all": v = v[v["severity"] == f_sev]
+    if f_evt != "all": v = v[v["event_type"] == f_evt]
+    if "time" in v.columns and pd.api.types.is_datetime64_any_dtype(v.get("time")):
+        tm = v["time"].notna()
+        if tm.any():
+            v = v[~tm | ((v["time"] >= pd.Timestamp(f_from, tz="UTC")) & (v["time"] < pd.Timestamp(f_to, tz="UTC") + pd.Timedelta(days=1)))]
+    return v
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE ROUTING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ──────────────── 📊 DASHBOARD ──────────────────────────────────────────────
+if page == "📊 Dashboard":
+    # Page header with refresh button
+    ph_left, ph_right = st.columns([4, 1])
+    with ph_left:
+        st.markdown('<div class="page-header"><h2>Dashboard Overview</h2><div class="subtitle">Real-time attack monitoring and threat intelligence</div></div>', unsafe_allow_html=True)
+    with ph_right:
+        st.markdown('<div style="height:18px"></div>', unsafe_allow_html=True)
+        if st.button("🔄 Refresh Data", key="refresh_btn", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+
+    # Filters
+    f_sev, f_evt, f_from, f_to, f_anom, f_raw = render_filters()
+    view = apply_filters(fdf, f_sev, f_evt, f_from, f_to, f_anom)
+
+    # KPI ROW
     k1, k2, k3, k4, k5 = st.columns(5)
-    with k1:
-        st.markdown(f"""
-        <div class="kpi-card kpi-accent-red">
-            <div class="kpi-label">Attacks Today</div>
-            <div class="kpi-value">{attacks_today}</div>
-        </div>""", unsafe_allow_html=True)
-    with k2:
-        st.markdown(f"""
-        <div class="kpi-card kpi-accent-orange">
-            <div class="kpi-label">Critical Alerts</div>
-            <div class="kpi-value">{critical_alerts}</div>
-        </div>""", unsafe_allow_html=True)
-    with k3:
-        st.markdown(f"""
-        <div class="kpi-card kpi-accent-blue">
-            <div class="kpi-label">Unique Attacker IPs</div>
-            <div class="kpi-value">{unique_attacker_ips}</div>
-        </div>""", unsafe_allow_html=True)
-    with k4:
-        st.markdown(f"""
-        <div class="kpi-card kpi-accent-green">
-            <div class="kpi-label">Blocked IPs</div>
-            <div class="kpi-value">{blocked_count}</div>
-        </div>""", unsafe_allow_html=True)
-    with k5:
-        st.markdown(f"""
-        <div class="kpi-card kpi-accent-purple">
-            <div class="kpi-label">Top Attack Type</div>
-            <div class="kpi-value" style="font-size:1.1rem">{freq_attack}</div>
-        </div>""", unsafe_allow_html=True)
+    kpis = [(k1,"red","⚔️","Attacks Today",attacks_today,"events detected"),
+            (k2,"amber","🚨","Critical Alerts",critical_alerts,"require response"),
+            (k3,"blue","🌐","Unique Attackers",unique_ips,"distinct IPs"),
+            (k4,"green","🚫","Blocked IPs",blocked_count,"auto-blocked"),
+            (k5,"purple","🎯","Top Attack",freq_attack,"most frequent")]
+    for col, accent, icon, label, val, trend in kpis:
+        with col:
+            fs = 'style="font-size:1rem"' if isinstance(val,str) and len(str(val))>4 else ""
+            st.markdown(f'<div class="kpi-card kpi-accent-{accent}"><div class="kpi-icon">{icon}</div><div class="kpi-label">{label}</div><div class="kpi-value" {fs}>{val}</div><div class="kpi-trend">{trend}</div></div>', unsafe_allow_html=True)
 
-    # ── Charts Row ──────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">📊 Security Analytics</div>',
-                unsafe_allow_html=True)
-    ov_c1, ov_c2 = st.columns(2)
+    # ROW 2: Attack Timeline (8) + Active Alerts (4)
+    st.markdown('<div class="section-hdr">📈 Threat Analytics</div>', unsafe_allow_html=True)
+    r2_left, r2_right = st.columns([2, 1])
 
-    with ov_c1:
-        # Attacks Over Time
+    with r2_left:
+        st.markdown('<div class="panel"><div class="panel-header">📈 Attack Timeline</div></div>', unsafe_allow_html=True)
         if "time" in fdf.columns and pd.api.types.is_datetime64_any_dtype(fdf.get("time")):
             atk = fdf[attack_mask & fdf["time"].notna()].copy()
             if not atk.empty:
                 atk["hour"] = atk["time"].dt.floor("h")
-                hourly = atk.groupby("hour").size().reset_index()
-                hourly.columns = ["Time", "Attacks"]
-                fig = px.line(hourly, x="Time", y="Attacks",
-                              color_discrete_sequence=["#f85149"],
-                              title="📈 Attacks Over Time")
-                fig.update_layout(**PLOTLY_LAYOUT)
-                fig.update_traces(line=dict(width=2), fill="tozeroy",
-                                  fillcolor="rgba(248,81,73,0.15)")
-                st.plotly_chart(fig, use_container_width=True, key="ov_attacks_time")
-            else:
-                st.info("No timestamped attack events.")
-        else:
-            st.info("No timestamp data available.")
+                hourly = atk.groupby("hour").size().reset_index(); hourly.columns = ["Time","Attacks"]
+                fig = px.area(hourly, x="Time", y="Attacks", color_discrete_sequence=["#ef4444"])
+                fig.update_layout(**PLOTLY_LAYOUT, title=None, height=280)
+                fig.update_traces(line=dict(width=2), fillcolor="rgba(239,68,68,0.1)")
+                st.plotly_chart(fig, use_container_width=True, key="d_timeline")
+            else: st.info("No timestamped attack events.")
+        else: st.info("No timestamp data.")
 
-    with ov_c2:
-        # Severity Distribution
-        sev_counts = fdf["severity"].value_counts().reset_index()
-        sev_counts.columns = ["Severity", "Count"]
-        sev_color_map = {"critical": "#f85149", "high": "#d29922",
-                         "medium": "#58a6ff", "low": "#3fb950"}
-        fig = px.pie(sev_counts, names="Severity", values="Count",
-                     hole=0.45, color="Severity",
-                     color_discrete_map=sev_color_map,
-                     title="🚦 Severity Distribution")
-        fig.update_layout(**PLOTLY_LAYOUT)
-        fig.update_traces(textposition="inside", textinfo="percent+label",
-                          textfont_size=11)
-        st.plotly_chart(fig, use_container_width=True, key="ov_severity")
+    with r2_right:
+        st.markdown('<div class="panel"><div class="panel-header">🚨 Active Alerts</div></div>', unsafe_allow_html=True)
+        hi_events = fdf[fdf["severity"].isin(["critical","high"])].copy()
+        if not hi_events.empty:
+            for _, row in hi_events.sort_values("time", ascending=False).head(8).iterrows():
+                sev = str(row.get("severity","low"))
+                atk = row.get("attack_type","") or row.get("event_type","")
+                st.markdown(f"""<div class="alert-item">
+                    <div class="alert-dot alert-dot-{sev}"></div>
+                    <div class="alert-info">
+                        <div class="alert-type">{atk}</div>
+                        <div class="alert-meta">{row.get('ip','?')} • {format_ts(row.get('time',''))}</div>
+                    </div>
+                    <span class="sev-badge sev-{sev}">{sev}</span>
+                </div>""", unsafe_allow_html=True)
+        else: st.info("No active alerts.")
 
-    # ── Quick summary row ───────────────────────────────────────────────────
-    ov_c3, ov_c4 = st.columns(2)
-    with ov_c3:
-        # Attack Type Donut
-        attack_types_s = fdf.loc[fdf["attack_type"] != "", "attack_type"]
-        if not attack_types_s.empty:
-            at_counts = attack_types_s.value_counts().reset_index()
-            at_counts.columns = ["Attack Type", "Count"]
-            fig = px.pie(at_counts, names="Attack Type", values="Count",
-                         hole=0.45, color_discrete_sequence=COLOR_SEQ,
-                         title="🎯 Attack Type Distribution")
-            fig.update_layout(**PLOTLY_LAYOUT)
-            fig.update_traces(textposition="inside", textinfo="percent+label",
-                              textfont_size=11)
-            st.plotly_chart(fig, use_container_width=True, key="ov_attack_type")
-        else:
-            st.info("No attack types detected yet.")
+    # ROW 3: Severity Dist (6) + AI Insight Widget (6)
+    r3_left, r3_right = st.columns(2)
+    with r3_left:
+        sev_c = fdf["severity"].value_counts().reset_index(); sev_c.columns = ["Severity","Count"]
+        fig = px.pie(sev_c, names="Severity", values="Count", hole=0.5, color="Severity",
+                     color_discrete_map={"critical":"#ef4444","high":"#f59e0b","medium":"#3b82f6","low":"#22c55e"}, title="🚦 Severity Distribution")
+        fig.update_layout(**PLOTLY_LAYOUT, height=320); fig.update_traces(textposition="inside", textinfo="percent+label", textfont_size=11)
+        st.plotly_chart(fig, use_container_width=True, key="d_sev")
 
-    with ov_c4:
-        # Event Type Breakdown
-        et_counts = fdf["event_type"].value_counts().head(8).reset_index()
-        et_counts.columns = ["Event Type", "Count"]
-        fig = px.bar(et_counts, x="Count", y="Event Type", orientation="h",
-                     color_discrete_sequence=["#58a6ff"],
-                     title="📋 Event Type Breakdown")
-        fig.update_layout(**PLOTLY_LAYOUT, yaxis=dict(autorange="reversed"))
-        st.plotly_chart(fig, use_container_width=True, key="ov_event_type")
+    with r3_right:
+        # AI Insight Widget
+        top_threat = freq_attack
+        ai_summary = f"Detected {attacks_total} attack events across {unique_ips} unique source IPs. "
+        if critical_alerts > 0: ai_summary += f"{critical_alerts} critical alerts require immediate attention. "
+        ai_summary += f"Primary threat vector: {top_threat}. {blocked_count} IPs auto-blocked."
+        overall_risk = min(95, critical_alerts * 15 + int((fdf["severity"]=="high").sum()) * 5)
+        rc = risk_class(overall_risk)
+        st.markdown(f"""<div class="ai-widget">
+            <div class="ai-title">🧠 AI Insight Engine</div>
+            <div class="ai-summary">{ai_summary}</div>
+            <span class="risk-badge {rc}">Risk Score: {overall_risk}/100</span>
+            &nbsp;&nbsp;<span class="sev-badge sev-{'critical' if overall_risk >= 70 else 'medium'}">
+            {'HIGH RISK' if overall_risk >= 70 else 'MODERATE'}</span>
+        </div>""", unsafe_allow_html=True)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — ATTACK MAP
-# ═══════════════════════════════════════════════════════════════════════════════
-with tab_map:
-    st.markdown('<div class="section-header">🌐 Attacker Geolocation Map</div>',
-                unsafe_allow_html=True)
-
-    # Build folium map
-    m = folium.Map(
-        location=[20, 0],
-        zoom_start=2,
-        tiles="CartoDB dark_matter",
-        control_scale=True,
-    )
-
+    # ROW 4: Attack Map + Charts
+    st.markdown('<div class="section-hdr">🌐 Global Threat Map</div>', unsafe_allow_html=True)
+    m = folium.Map(location=[20,0], zoom_start=2, tiles="CartoDB dark_matter", control_scale=True)
     ip_counts = {}
+    for r in geo_rows: ip_counts[r["ip"]] = ip_counts.get(r["ip"],0)+1
     for r in geo_rows:
-        key = r["ip"]
-        ip_counts[key] = ip_counts.get(key, 0) + 1
-
-    for r in geo_rows:
-        sev = r["severity"]
-        color = SEVERITY_COLORS.get(sev, "gray")
-        attempt_count = ip_counts.get(r["ip"], 1)
-
-        popup_html = f"""
-        <div style="font-family:Inter,sans-serif;font-size:12px;min-width:200px;background:#161b22;color:#c9d1d9;padding:10px;border-radius:8px;border:1px solid #30363d;">
-            <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:#e6edf3;">🎯 Attack Event</div>
-            <table style="width:100%;border-collapse:collapse;">
-                <tr><td style="color:#7d8590;padding:2px 8px 2px 0;">IP</td><td style="font-weight:600;">{r['ip']}</td></tr>
-                <tr><td style="color:#7d8590;padding:2px 8px 2px 0;">Country</td><td>{r['country']}</td></tr>
-                <tr><td style="color:#7d8590;padding:2px 8px 2px 0;">City</td><td>{r['city']}</td></tr>
-                <tr><td style="color:#7d8590;padding:2px 8px 2px 0;">Attack</td><td style="color:#f85149;">{r['attack_type'] or r['event_type']}</td></tr>
-                <tr><td style="color:#7d8590;padding:2px 8px 2px 0;">MITRE</td><td>{r['mitre_id']} {r['mitre_name']}</td></tr>
-                <tr><td style="color:#7d8590;padding:2px 8px 2px 0;">Severity</td><td><span style="color:{color};font-weight:700;">●</span> {sev.upper()}</td></tr>
-                <tr><td style="color:#7d8590;padding:2px 8px 2px 0;">Attempts</td><td style="font-weight:700;">{attempt_count}</td></tr>
-            </table>
-        </div>
-        """
-        folium.CircleMarker(
-            location=[r["lat"], r["lon"]],
-            radius=6 + min(attempt_count, 10),
-            color=color, fill=True, fill_color=color, fill_opacity=0.7,
-            popup=folium.Popup(popup_html, max_width=280),
-            tooltip=f"{r['ip']} — {r['country']} — {sev}",
-        ).add_to(m)
-
-    st.markdown('<div class="map-container">', unsafe_allow_html=True)
-    st_folium(m, width=None, height=480, returned_objects=[])
+        sev=r["severity"]; color=SEVERITY_COLORS.get(sev,"gray"); ac=ip_counts.get(r["ip"],1)
+        popup=f'<div style="font-family:Inter;font-size:12px;min-width:180px;background:#111827;color:#e2e8f0;padding:10px;border-radius:8px;border:1px solid #1e293b;"><b>{r["ip"]}</b><br>{r["country"]}<br><span style="color:#ef4444">{r["attack_type"] or r["event_type"]}</span><br>MITRE: {r["mitre_id"]}<br><b style="color:{color}">{sev.upper()}</b> • {ac} attempts</div>'
+        folium.CircleMarker(location=[r["lat"],r["lon"]], radius=6+min(ac,10), color=color, fill=True,
+                           fill_color=color, fill_opacity=0.7, popup=folium.Popup(popup, max_width=260),
+                           tooltip=f"{r['ip']} — {r['country']}").add_to(m)
+    st.markdown('<div class="map-wrap">', unsafe_allow_html=True)
+    st_folium(m, width=None, height=380, returned_objects=[])
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── Charts below the map ────────────────────────────────────────────────
-    map_c1, map_c2 = st.columns(2)
+    # Bottom charts
+    bc1, bc2 = st.columns(2)
+    with bc1:
+        at_s = fdf.loc[fdf["attack_type"]!="","attack_type"]
+        if not at_s.empty:
+            at_c = at_s.value_counts().reset_index(); at_c.columns = ["Attack Type","Count"]
+            fig = px.pie(at_c, names="Attack Type", values="Count", hole=0.45, color_discrete_sequence=COLOR_SEQ, title="🎯 Attack Distribution")
+            fig.update_layout(**PLOTLY_LAYOUT, height=300); fig.update_traces(textposition="inside", textinfo="percent+label", textfont_size=11)
+            st.plotly_chart(fig, use_container_width=True, key="d_atktype")
+    with bc2:
+        et_c = fdf["event_type"].value_counts().head(8).reset_index(); et_c.columns = ["Event","Count"]
+        fig = px.bar(et_c, x="Count", y="Event", orientation="h", color_discrete_sequence=["#3b82f6"], title="📋 Event Breakdown")
+        fig.update_layout(**PLOTLY_LAYOUT, yaxis=dict(autorange="reversed"), height=300)
+        st.plotly_chart(fig, use_container_width=True, key="d_events")
 
-    with map_c1:
-        if "ip" in fdf.columns:
-            ip_top = fdf.loc[attack_mask, "ip"].value_counts().head(10).reset_index()
-            ip_top.columns = ["IP Address", "Attacks"]
-            if not ip_top.empty:
-                fig = px.bar(ip_top, x="Attacks", y="IP Address", orientation="h",
-                             color_discrete_sequence=["#d29922"],
-                             title="🔥 Top Attacker IPs")
-                fig.update_layout(**PLOTLY_LAYOUT, yaxis=dict(autorange="reversed"))
-                st.plotly_chart(fig, use_container_width=True, key="map_top_ips")
-            else:
-                st.info("No attacker IPs yet.")
-        else:
-            st.info("No IP data.")
+    # Blocked IPs
+    st.markdown('<div class="section-hdr">🚫 Blocked IPs & Auto-Response</div>', unsafe_allow_html=True)
+    bl1, bl2 = st.columns(2)
+    with bl1:
+        if blocklist:
+            bl_data = [{"IP":ip,"Reason":info.get("reason",""),"Blocked At":format_ts(info.get("timestamp","")),"Status":"🔴 Active"} for ip,info in blocklist.items()]
+            st.dataframe(pd.DataFrame(bl_data), use_container_width=True, hide_index=True)
+        else: st.info("No IPs blocked.")
+    with bl2:
+        crit = fdf[fdf["severity"]=="critical"].copy()
+        if not crit.empty:
+            resp = [{"Time":format_ts(row.get("time","")),"IP":row.get("ip","?"),"Attack":row.get("attack_type","") or "—",
+                     "MITRE":row.get("mitre_id","") or "—","Action":"🚫 Blocked" if row.get("ip","") in blocklist else "⚠️ Alert"}
+                    for _,row in crit.sort_values("time",ascending=False).head(12).iterrows()]
+            st.dataframe(pd.DataFrame(resp), use_container_width=True, hide_index=True, height=220)
+        else: st.info("No auto-response events.")
 
-    with map_c2:
-        if geo_rows:
-            country_counts = pd.Series([r["country"] for r in geo_rows]).value_counts().head(10).reset_index()
-            country_counts.columns = ["Country", "Attacks"]
-            fig = px.bar(country_counts, x="Attacks", y="Country", orientation="h",
-                         color_discrete_sequence=["#bc8cff"],
-                         title="🌍 Top Attacking Countries")
-            fig.update_layout(**PLOTLY_LAYOUT, yaxis=dict(autorange="reversed"))
-            st.plotly_chart(fig, use_container_width=True, key="map_top_countries")
-        else:
-            st.info("No geo data available yet.")
+# ──────────────── 🐝 LIVE HONEYPOT LOGS ─────────────────────────────────────
+elif page == "🐝 Live Honeypot Logs":
+    st.markdown('<div class="page-header"><h2>Live Honeypot Logs</h2><div class="subtitle">Real-time event stream from honeypot sensors</div></div>', unsafe_allow_html=True)
+    f_sev, f_evt, f_from, f_to, f_anom, f_raw = render_filters()
+    view = apply_filters(fdf, f_sev, f_evt, f_from, f_to, f_anom)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — MITRE & THREAT ANALYSIS
-# ═══════════════════════════════════════════════════════════════════════════════
-with tab_mitre:
-    st.markdown('<div class="section-header">🗺️ MITRE ATT&CK Analysis</div>',
-                unsafe_allow_html=True)
-
-    mi_c1, mi_c2 = st.columns(2)
-
-    with mi_c1:
-        # MITRE Technique Distribution
-        mitre_data = fdf.loc[fdf["mitre_id"] != ""]
-        if not mitre_data.empty:
-            mitre_labels = mitre_data.apply(
-                lambda r: f"{r['mitre_id']} ({r['mitre_name']})" if r.get("mitre_name") else r["mitre_id"],
-                axis=1
-            )
-            mc = mitre_labels.value_counts().reset_index()
-            mc.columns = ["MITRE Technique", "Count"]
-            fig = px.bar(mc, x="Count", y="MITRE Technique", orientation="h",
-                         color_discrete_sequence=["#58a6ff"],
-                         title="🗺️ MITRE Technique Distribution")
-            fig.update_layout(**PLOTLY_LAYOUT, yaxis=dict(autorange="reversed"))
-            st.plotly_chart(fig, use_container_width=True, key="mi_technique")
-        else:
-            st.info("No MITRE mappings yet — run adversary simulations.")
-
-    with mi_c2:
-        # Attack Type Distribution
-        attack_types_s = fdf.loc[fdf["attack_type"] != "", "attack_type"]
-        if not attack_types_s.empty:
-            at_counts = attack_types_s.value_counts().reset_index()
-            at_counts.columns = ["Attack Type", "Count"]
-            fig = px.pie(at_counts, names="Attack Type", values="Count",
-                         hole=0.45, color_discrete_sequence=COLOR_SEQ,
-                         title="🎯 Attack Type Distribution")
-            fig.update_layout(**PLOTLY_LAYOUT)
-            fig.update_traces(textposition="inside", textinfo="percent+label",
-                              textfont_size=11)
-            st.plotly_chart(fig, use_container_width=True, key="mi_attack_type")
-        else:
-            st.info("No attack types detected yet.")
-
-    # ── Second row ──────────────────────────────────────────────────────────
-    mi_c3, mi_c4 = st.columns(2)
-
-    with mi_c3:
-        # MITRE Tactic Breakdown
-        tactic_data = fdf.loc[fdf["mitre_tactic"] != "", "mitre_tactic"]
-        if not tactic_data.empty:
-            tc = tactic_data.value_counts().reset_index()
-            tc.columns = ["Tactic", "Count"]
-            fig = px.bar(tc, x="Count", y="Tactic", orientation="h",
-                         color_discrete_sequence=["#3fb950"],
-                         title="🎖️ MITRE Tactic Breakdown")
-            fig.update_layout(**PLOTLY_LAYOUT, yaxis=dict(autorange="reversed"))
-            st.plotly_chart(fig, use_container_width=True, key="mi_tactic")
-        else:
-            st.info("No tactic data yet.")
-
-    with mi_c4:
-        # Most Targeted Services (endpoints)
-        targeted = fdf.loc[attack_mask, "path"]
-        if not targeted.empty:
-            path_counts = targeted.value_counts().head(10).reset_index()
-            path_counts.columns = ["Endpoint", "Attacks"]
-            fig = px.bar(path_counts, x="Attacks", y="Endpoint", orientation="h",
-                         color_discrete_sequence=["#ffa657"],
-                         title="🎯 Most Targeted Services")
-            fig.update_layout(**PLOTLY_LAYOUT, yaxis=dict(autorange="reversed"))
-            st.plotly_chart(fig, use_container_width=True, key="mi_targeted")
-        else:
-            st.info("No targeted endpoint data yet.")
-
-    # ── MITRE detail table ──────────────────────────────────────────────────
-    if not mitre_data.empty:
-        st.markdown('<div class="section-header">📋 MITRE Technique Details</div>',
-                    unsafe_allow_html=True)
-        mitre_table = mitre_data[["mitre_id", "mitre_name", "mitre_tactic",
-                                   "attack_type", "severity", "ip"]].copy()
-        mitre_table.columns = ["Technique ID", "Technique Name", "Tactic",
-                               "Attack Type", "Severity", "Source IP"]
-        st.dataframe(mitre_table.drop_duplicates().reset_index(drop=True),
-                     use_container_width=True, hide_index=True, height=300)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — INCIDENTS
-# ═══════════════════════════════════════════════════════════════════════════════
-with tab_incidents:
-    st.markdown('<div class="section-header">🔍 Security Incidents</div>',
-                unsafe_allow_html=True)
-
-    # Sub-tabs for filtering incident categories
-    inc_all, inc_attacks, inc_traps, inc_uploads = st.tabs([
-        "📋 All Events", "🚨 Attacks", "🪤 Traps", "📁 Uploads"
-    ])
-
+    inc_all, inc_attacks, inc_traps, inc_uploads = st.tabs(["📋 All Events","🚨 Attacks","🪤 Traps","📁 Uploads"])
     with inc_all:
-        recent = view.sort_values("time", ascending=False).head(100) if "time" in view.columns else view.tail(100)
-
+        recent = view.sort_values("time",ascending=False).head(100) if "time" in view.columns else view.tail(100)
         if not recent.empty:
-            table_rows = []
-            for idx, row in recent.iterrows():
-                sev = str(row.get("severity", "low"))
-                table_rows.append({
-                    "Time": format_ts(row.get("time", "")),
-                    "IP": row.get("ip", "?"),
-                    "Method": row.get("method", "?"),
-                    "Path": row.get("path", "?"),
-                    "Event": row.get("event_type", ""),
-                    "Severity": sev.upper(),
-                    "MITRE": row.get("mitre_id", "") or "—",
-                    "ML Class": labels.get(int(row.get("pred", 0)), "unknown"),
-                })
-
-            st.dataframe(
-                pd.DataFrame(table_rows),
-                use_container_width=True,
-                height=400,
-                hide_index=True,
-            )
-
-        # Expandable details
-        if show_raw:
-            st.markdown("##### Event Details")
-            detail_recent = recent.head(50)
-            for idx, row in detail_recent.iterrows():
-                sev = str(row.get("severity", "low"))
-                icon = get_severity_icon(sev)
-                ts = format_ts(row.get("time", ""))
-                ip = row.get("ip", "?")
-                method = row.get("method", "?")
-                path = row.get("path", "?")
-                etype = row.get("event_type", "")
-                mitre = row.get("mitre_id", "")
-                mitre_label = f" | 🗺️ {mitre}" if mitre else ""
-                label = f"{icon} {ts}  |  {ip}  |  {method} {path}  |  {etype}  |  {sev}{mitre_label}"
-
-                with st.expander(label, expanded=False):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.write(f"**IP:** {ip}")
-                        st.write(f"**Method:** {method}")
-                        st.write(f"**Path:** {path}")
-                        st.write(f"**Event:** {etype}")
-                        st.write(f"**Severity:** {icon} {sev}")
-                        pred_label = labels.get(int(row.get("pred", 0)), "unknown")
-                        st.write(f"**ML Class:** {pred_label}")
-                        st.write(f"**Anomaly:** {row.get('anomaly', 1) == -1}")
+            tbl = [{"Time":format_ts(row.get("time","")),"IP":row.get("ip","?"),"Method":row.get("method","?"),
+                   "Path":row.get("path","?"),"Event":row.get("event_type",""),"Severity":str(row.get("severity","low")).upper(),
+                   "MITRE":row.get("mitre_id","") or "—","ML":labels.get(int(row.get("pred",0)),"?")} for _,row in recent.iterrows()]
+            st.dataframe(pd.DataFrame(tbl), use_container_width=True, height=400, hide_index=True)
+        st.markdown("---")
+        st.markdown("**🧠 Select event for AI analysis:**")
+        atk_idx = [i for i,l in enumerate(logs) if l.get("event_type") in ("attack_detected","brute_force_detected","suspicious_upload","honeypot_trap")]
+        if atk_idx:
+            opts = [f"#{i} — {logs[i].get('event_type','')} — {logs[i].get('ip','?')} — {format_ts(logs[i].get('timestamp',''))}" for i in atk_idx[-30:]]
+            sel = st.selectbox("Select event", opts, key="log_sel")
+            if sel:
+                st.session_state["selected_log_idx"] = atk_idx[-30:][opts.index(sel)]
+                st.info("✅ Selected. Go to **🧠 AI Threat Analysis** in sidebar.")
+        if f_raw and not recent.empty:
+            for idx, row in recent.head(30).iterrows():
+                sev = str(row.get("severity","low")); icon = get_severity_icon(sev)
+                with st.expander(f"{icon} {format_ts(row.get('time',''))} | {row.get('ip','?')} | {row.get('method','?')} {row.get('path','?')} | {row.get('event_type','')}", expanded=False):
+                    c1,c2 = st.columns(2)
+                    with c1: st.write(f"**IP:** {row.get('ip','?')}"); st.write(f"**Severity:** {icon} {sev}"); st.write(f"**ML:** {labels.get(int(row.get('pred',0)),'?')}")
                     with c2:
-                        if mitre:
-                            st.write("**🗺️ MITRE ATT&CK:**")
-                            st.code(f"ID:     {row.get('mitre_id', '')}\n"
-                                    f"Name:   {row.get('mitre_name', '')}\n"
-                                    f"Tactic: {row.get('mitre_tactic', '')}")
-                        if idx < len(logs):
-                            entry = logs[idx]
-                            details = entry.get("details", {})
-                            if details:
-                                st.write("**Details:**")
-                                st.json(details)
-                            if entry.get("form"):
-                                st.write("**Form Data:**")
-                                for k, v in entry["form"].items():
-                                    st.code(f"{k}: {v}")
-
+                        if row.get("mitre_id"): st.code(f"MITRE: {row.get('mitre_id','')} — {row.get('mitre_name','')}\nTactic: {row.get('mitre_tactic','')}")
+                        if idx < len(logs) and logs[idx].get("details"): st.json(logs[idx]["details"])
     with inc_attacks:
-        attack_view = fdf[fdf["stored_class"].isin(["sqli", "xss", "malicious_upload"])]
-        if attack_view.empty:
-            st.info("No attacks detected.")
+        av = fdf[fdf["stored_class"].isin(["sqli","xss","malicious_upload"])]
+        if av.empty: st.info("No attacks detected.")
         else:
-            for idx, row in attack_view.sort_values("time", ascending=False).head(50).iterrows():
-                sev = str(row.get("severity", "low"))
-                icon = get_severity_icon(sev)
-                entry = logs[idx] if idx < len(logs) else {}
-                details = entry.get("details", {})
-                mitre = row.get("mitre_id", "")
-                mitre_tag = f" [{mitre}]" if mitre else ""
-                st.error(f"{icon} **{row.get('stored_class', '').upper()}**{mitre_tag} — "
-                         f"{row.get('ip', '?')} — {row.get('method', '?')} {row.get('path', '?')} — "
-                         f"{format_ts(row.get('time', ''))}")
-                if details.get("attack_patterns"):
-                    st.code(f"Patterns: {details['attack_patterns']}")
-                if entry.get("form"):
-                    for k, v in entry["form"].items():
-                        st.code(f"  {k}: {v}")
-
+            for idx,row in av.sort_values("time",ascending=False).head(50).iterrows():
+                entry = logs[idx] if idx < len(logs) else {}; det = entry.get("details",{})
+                mt = f" [{row.get('mitre_id','')}]" if row.get("mitre_id") else ""
+                st.error(f"{get_severity_icon(row.get('severity',''))} **{row.get('stored_class','').upper()}**{mt} — {row.get('ip','?')} — {format_ts(row.get('time',''))}")
+                if det.get("attack_patterns"): st.code(f"Patterns: {det['attack_patterns']}")
     with inc_traps:
-        trap_view = fdf[fdf["event_type"] == "honeypot_trap"]
-        if trap_view.empty:
-            st.info("No honeypot trap hits.")
+        tv = fdf[fdf["event_type"]=="honeypot_trap"]
+        if tv.empty: st.info("No trap hits.")
         else:
-            for idx, row in trap_view.sort_values("time", ascending=False).head(50).iterrows():
+            for idx,row in tv.sort_values("time",ascending=False).head(50).iterrows():
                 entry = logs[idx] if idx < len(logs) else {}
-                st.warning(f"🪤 {row.get('ip', '?')} hit **{row.get('path', '?')}** "
-                           f"at {format_ts(row.get('time', ''))}")
-                if entry.get("details", {}).get("description"):
-                    st.caption(entry["details"]["description"])
-
+                st.warning(f"🪤 {row.get('ip','?')} → **{row.get('path','?')}** at {format_ts(row.get('time',''))}")
     with inc_uploads:
-        upload_view = fdf[fdf["event_type"].isin(["file_upload", "suspicious_upload"])]
-        if upload_view.empty:
-            st.info("No file uploads recorded.")
+        uv = fdf[fdf["event_type"].isin(["file_upload","suspicious_upload"])]
+        if uv.empty: st.info("No uploads.")
         else:
-            for idx, row in upload_view.sort_values("time", ascending=False).head(50).iterrows():
-                entry = logs[idx] if idx < len(logs) else {}
-                details = entry.get("details", {})
-                uicon = "⚠️" if row.get("event_type") == "suspicious_upload" else "📄"
-                st.write(f"{uicon} **{details.get('filename', '?')}** "
-                         f"({details.get('file_size', 0)} bytes) — "
-                         f"{details.get('user', '?')} — "
-                         f"{format_ts(row.get('time', ''))}")
-                if details.get("suspicions"):
-                    for s in details["suspicions"]:
-                        st.error(f"  🚨 {s}")
+            for idx,row in uv.sort_values("time",ascending=False).head(50).iterrows():
+                det = (logs[idx] if idx<len(logs) else {}).get("details",{})
+                ic = "⚠️" if row.get("event_type")=="suspicious_upload" else "📄"
+                st.write(f"{ic} **{det.get('filename','?')}** ({det.get('file_size',0)}B) — {format_ts(row.get('time',''))}")
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 5 — RESPONSE / BLOCKED IPs
-# ═══════════════════════════════════════════════════════════════════════════════
-with tab_response:
-    st.markdown('<div class="section-header">🚫 Blocked IPs</div>',
-                unsafe_allow_html=True)
-
-    if blocklist:
-        bl_data = []
-        for ip, info in blocklist.items():
-            bl_data.append({
-                "IP Address": ip,
-                "Reason": info.get("reason", ""),
-                "Blocked At": format_ts(info.get("timestamp", "")),
-                "Status": "🔴 Active" if info.get("blocked", True) else "⚪ Inactive",
-            })
-        st.dataframe(pd.DataFrame(bl_data), use_container_width=True, hide_index=True)
+# ──────────────── 🧠 AI THREAT ANALYSIS ─────────────────────────────────────
+elif page == "🧠 AI Threat Analysis":
+    st.markdown('<div class="page-header"><h2>AI Threat Analysis</h2><div class="subtitle">Deep investigation powered by threat intelligence engine</div></div>', unsafe_allow_html=True)
+    atk_idx = [i for i,l in enumerate(logs) if l.get("event_type") in ("attack_detected","brute_force_detected","suspicious_upload","honeypot_trap")]
+    sel_idx = st.session_state.get("selected_log_idx", None)
+    if not atk_idx: st.info("No attack events to analyze.")
     else:
-        st.info("No IPs are currently blocked.")
+        opts = [f"#{i} — {logs[i].get('event_type','')} — {logs[i].get('ip','?')} — {format_ts(logs[i].get('timestamp',''))}" for i in atk_idx[-50:]]
+        default = 0
+        if sel_idx is not None and sel_idx in atk_idx[-50:]: default = atk_idx[-50:].index(sel_idx)
+        sel = st.selectbox("Select event", opts, index=default, key="ai_sel")
+        chosen = atk_idx[-50:][opts.index(sel)]
+        analysis = analyze_threat(logs[chosen])
+        rc = risk_class(analysis["risk_score"])
 
-    # ── Auto-Response Log ───────────────────────────────────────────────────
-    st.markdown('<div class="section-header">⚡ Auto-Response Log</div>',
-                unsafe_allow_html=True)
+        # Risk header
+        st.markdown(f'<span class="risk-badge {rc}">Risk: {analysis["risk_score"]}/100</span>&nbsp;&nbsp;'
+                    f'<span class="risk-badge {rc}">Confidence: {analysis["confidence_score"]}%</span>', unsafe_allow_html=True)
+        st.markdown("")
 
-    # Filter for events that triggered auto-response (critical severity events)
-    critical_events = fdf[fdf["severity"] == "critical"].copy()
-    if not critical_events.empty:
-        resp_rows = []
-        for idx, row in critical_events.sort_values("time", ascending=False).head(30).iterrows():
-            entry = logs[idx] if idx < len(logs) else {}
-            details = entry.get("details", {})
-            resp_rows.append({
-                "Time": format_ts(row.get("time", "")),
-                "IP": row.get("ip", "?"),
-                "Event": row.get("event_type", ""),
-                "Attack Type": row.get("attack_type", "") or details.get("attack_type", "—"),
-                "MITRE": row.get("mitre_id", "") or "—",
-                "Action": "🚫 IP Blocked" if row.get("ip", "") in blocklist else "⚠️ Alert Sent",
-                "Severity": "CRITICAL",
-            })
-        st.dataframe(pd.DataFrame(resp_rows), use_container_width=True,
-                     hide_index=True, height=300)
+        with st.expander("🔍 Threat Overview", expanded=True):
+            c1,c2 = st.columns(2)
+            with c1: st.write(f"**Threat Type:** {analysis['threat_type']}"); st.write(f"**Risk Score:** {analysis['risk_score']}/100"); st.write(f"**Severity:** {get_severity_icon(analysis['severity'])} {analysis['severity'].upper()}")
+            with c2: st.write(f"**Source IP:** {analysis['ip']}"); st.write(f"**Endpoint:** {analysis['endpoint']}"); st.write(f"**Time:** {format_ts(analysis['timestamp'])}")
+        if analysis.get("reasoning"):
+            with st.expander("🧠 AI Reasoning", expanded=True): st.markdown(f"> {analysis['reasoning']}")
+        if analysis.get("mitre_technique"):
+            with st.expander("🗺️ MITRE ATT&CK Mapping", expanded=True): st.code(f"ID:     {analysis['mitre_technique']}\nName:   {analysis.get('mitre_name','')}\nTactic: {analysis.get('mitre_tactic','')}")
+        if analysis.get("impact"):
+            with st.expander("💥 Impact Assessment", expanded=False): st.warning(analysis["impact"])
+        if analysis.get("mitigation_steps"):
+            with st.expander("🛡 Mitigation Steps", expanded=False):
+                for i,s in enumerate(analysis["mitigation_steps"],1): st.write(f"**{i}.** {s}")
+        if analysis.get("prevention_recommendations"):
+            with st.expander("🔒 Prevention Recommendations", expanded=False):
+                for i,r in enumerate(analysis["prevention_recommendations"],1): st.write(f"**{i}.** {r}")
+        # Raw log
+        with st.expander("📋 Raw Log Data", expanded=False): st.json(logs[chosen])
+        st.markdown("---")
+        if st.button("📂 Create Case from Analysis", key="create_case"):
+            case = create_case(title=f"{analysis['threat_type']} — {analysis['ip']}", severity=analysis["severity"],
+                              description=f"Attack: {analysis['attack_pattern']}\nImpact: {analysis['impact']}",
+                              log_index=chosen, extra={"threat_type":analysis["threat_type"],"risk_score":analysis["risk_score"],
+                              "mitre_technique":analysis.get("mitre_technique",""),"mitigation_steps":analysis.get("mitigation_steps",[])})
+            st.success(f"✅ Case #{case['id']} created!")
+
+# ──────────────── 🛡 MITIGATION CENTER ──────────────────────────────────────
+elif page == "🛡 Mitigation Center":
+    st.markdown('<div class="page-header"><h2>Mitigation Center</h2><div class="subtitle">Aggregated defensive recommendations and response actions</div></div>', unsafe_allow_html=True)
+    all_steps, all_recs = get_all_mitigations(logs)
+    sev_d = fdf["severity"].value_counts().to_dict()
+    hi = sev_d.get("critical",0)+sev_d.get("high",0)
+    overall = min(95, hi*10+sev_d.get("medium",0)*3) if hi else 10
+    rc = risk_class(overall)
+    st.markdown(f'<span class="risk-badge {rc}">Overall Risk: {overall}/100</span>', unsafe_allow_html=True)
+    st.markdown("")
+    mc1, mc2 = st.columns(2)
+    with mc1:
+        st.markdown("#### 🛡 Mitigation Steps")
+        if all_steps:
+            for i,s in enumerate(all_steps,1): st.write(f"**{i}.** {s}")
+        else: st.info("No mitigations needed.")
+    with mc2:
+        st.markdown("#### 🔒 Prevention Recommendations")
+        if all_recs:
+            for i,r in enumerate(all_recs,1): st.write(f"**{i}.** {r}")
+        else: st.info("System clean.")
+    st.markdown("---")
+    if all_steps or all_recs:
+        pdf = generate_mitigation_pdf({"risk_score":overall,"severity":"high" if overall>=70 else "medium","threat_type":"Aggregated"}, all_steps, all_recs)
+        st.download_button("📄 Download Mitigation Report (PDF)", pdf, file_name="mitigation_report.pdf", mime="application/pdf")
+
+# ──────────────── 📂 CASE MANAGEMENT ────────────────────────────────────────
+elif page == "📂 Case Management":
+    st.markdown('<div class="page-header"><h2>Case Management</h2><div class="subtitle">Track, manage, and resolve security incidents</div></div>', unsafe_allow_html=True)
+    cases = get_cases()
+    if not cases: st.info("No cases. Create from AI Threat Analysis tab.")
     else:
-        st.info("No auto-response events recorded yet.")
+        for case in reversed(cases):
+            sev = str(case.get("severity","low")).lower(); status = case.get("status","Open")
+            si = {"Open":"🔴","In Progress":"🟡","Closed":"🟢"}.get(status,"⚪")
+            sc = {"critical":"#ef4444","high":"#f59e0b","medium":"#3b82f6","low":"#22c55e"}.get(sev,"#64748b")
+            st.markdown(f"""<div class="resp-card" style="border-left:3px solid {sc};">
+                <div class="rc-title">{si} Case #{case['id']}: {case.get('title','Untitled')}</div>
+                <div class="rc-meta"><span class="sev-badge sev-{sev}">{sev.upper()}</span> &nbsp;•&nbsp; {status} &nbsp;•&nbsp; {format_ts(case.get('created_at',''))}</div>
+            </div>""", unsafe_allow_html=True)
+            cc1,cc2,cc3 = st.columns([2,1,1])
+            with cc1:
+                with st.expander(f"Details — Case #{case['id']}", expanded=False):
+                    st.write(case.get("description","No description"))
+                    if case.get("threat_type"): st.write(f"**Threat:** {case['threat_type']}")
+                    if case.get("mitre_technique"): st.write(f"**MITRE:** {case['mitre_technique']}")
+                    if case.get("mitigation_steps"):
+                        for s in case["mitigation_steps"]: st.write(f"- {s}")
+            with cc2:
+                ns = st.selectbox("Status",["Open","In Progress","Closed"],index=["Open","In Progress","Closed"].index(status),key=f"st_{case['id']}")
+                if ns != status: update_case_status(case["id"],ns); st.rerun()
+            with cc3:
+                pb = generate_case_pdf(case)
+                st.download_button("📄 PDF",pb,file_name=f"case_{case['id']}.pdf",mime="application/pdf",key=f"pd_{case['id']}")
 
-    # ── Alert History ───────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">🔔 Alert History</div>',
-                unsafe_allow_html=True)
-
-    # Show all high + critical severity events as alert history
-    alert_events = fdf[fdf["severity"].isin(["critical", "high"])].copy()
-    if not alert_events.empty:
-        for idx, row in alert_events.sort_values("time", ascending=False).head(20).iterrows():
-            sev = str(row.get("severity", ""))
-            icon = get_severity_icon(sev)
-            ts = format_ts(row.get("time", ""))
-            ip = row.get("ip", "?")
-            etype = row.get("event_type", "")
-            mitre = row.get("mitre_id", "")
-            attack = row.get("attack_type", "") or etype
-
-            mitre_badge = f"&nbsp;&nbsp;<code>{mitre}</code>" if mitre else ""
-
-            st.markdown(f"""
-            <div class="response-card" style="border-left: 3px solid {'#f85149' if sev == 'critical' else '#d29922'};">
-                <div class="rc-title">{icon} {attack}{mitre_badge}</div>
-                <div class="rc-meta">
-                    {ts} &nbsp;•&nbsp; IP: <strong>{ip}</strong> &nbsp;•&nbsp;
-                    Event: {etype} &nbsp;•&nbsp; Severity: {sev.upper()}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("No alerts recorded yet.")
-
+# ──────────────── 📊 REPORTS ────────────────────────────────────────────────
+elif page == "📊 Reports":
+    st.markdown('<div class="page-header"><h2>Executive Reports</h2><div class="subtitle">Generate and export threat intelligence summaries</div></div>', unsafe_allow_html=True)
+    r1,r2,r3,r4 = st.columns(4)
+    with r1: st.metric("Total Events", len(logs))
+    with r2: st.metric("Attacks", attacks_total)
+    with r3: st.metric("Critical", critical_alerts)
+    with r4: st.metric("Blocked", blocked_count)
+    rc1,rc2 = st.columns(2)
+    with rc1:
+        sev_c = fdf["severity"].value_counts().reset_index(); sev_c.columns=["Severity","Count"]
+        fig = px.pie(sev_c,names="Severity",values="Count",hole=0.45,color="Severity",
+                     color_discrete_map={"critical":"#ef4444","high":"#f59e0b","medium":"#3b82f6","low":"#22c55e"},title="Severity Distribution")
+        fig.update_layout(**PLOTLY_LAYOUT,height=300); st.plotly_chart(fig,use_container_width=True,key="r_sev")
+    with rc2:
+        md = fdf.loc[fdf["mitre_id"]!=""]
+        if not md.empty:
+            ml = md.apply(lambda r: f"{r['mitre_id']} ({r['mitre_name']})" if r.get("mitre_name") else r["mitre_id"], axis=1)
+            mc = ml.value_counts().reset_index(); mc.columns=["Technique","Count"]
+            fig = px.bar(mc,x="Count",y="Technique",orientation="h",color_discrete_sequence=["#3b82f6"],title="MITRE Techniques")
+            fig.update_layout(**PLOTLY_LAYOUT,yaxis=dict(autorange="reversed"),height=300)
+            st.plotly_chart(fig,use_container_width=True,key="r_mitre")
+        else: st.info("No MITRE data.")
+    st.markdown("---")
+    stats = {"Total Events":len(logs),"Attacks":attacks_total,"Critical":critical_alerts,"Blocked IPs":blocked_count,"Unique Attackers":unique_ips,"Top Attack":freq_attack}
+    atk_sum = fdf.loc[fdf["attack_type"]!="","attack_type"].value_counts().to_dict()
+    all_s,all_r = get_all_mitigations(logs)
+    # Build threat analysis data for PDF
+    _atk_idx = [i for i,l in enumerate(logs) if l.get("event_type") in ("attack_detected","brute_force_detected","suspicious_upload","honeypot_trap")]
+    _threats = [analyze_threat(logs[i]) for i in _atk_idx[-5:]] if _atk_idx else None
+    # Top attacker IPs
+    _top_ips = None
+    if "ip" in fdf.columns and attack_mask.any():
+        _ip_counts = fdf.loc[attack_mask,"ip"].value_counts().head(5)
+        _top_ips = [{"ip":ip,"count":int(c)} for ip,c in _ip_counts.items()]
+    pdf = generate_executive_pdf(stats, atk_sum, blocklist, (all_s,all_r), threats=_threats, top_ips=_top_ips)
+    st.download_button("📄 Download Executive Report (PDF)", pdf, file_name="executive_report.pdf", mime="application/pdf")
 
 # ── Footer ──────────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="text-align:center;padding:24px 0 8px;color:#30363d;font-size:0.75rem;border-top:1px solid #21262d;margin-top:32px;">
-    SecureCorp SOC Console  •  MITRE ATT&CK Enriched  •  Automated Response  •  Models: IsolationForest · RandomForest
+<div style="text-align:center;padding:20px 0 8px;color:#334155;font-size:0.68rem;border-top:1px solid #1e293b;margin-top:28px;">
+    SecureCorp AI-SIEM &nbsp;•&nbsp; MITRE ATT&CK &nbsp;•&nbsp; ML: IsolationForest · RandomForest &nbsp;•&nbsp; v2.0
 </div>
 """, unsafe_allow_html=True)
