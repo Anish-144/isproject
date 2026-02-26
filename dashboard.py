@@ -8,6 +8,7 @@ from log_parser import extract_features, LOGPATH
 from datetime import datetime, date, timedelta
 from geo_lookup import geolocate
 from threat_intel import analyze_threat, get_all_mitigations
+from response_engine import block_ip as do_block_ip, is_blocked
 from case_manager import (get_cases, create_case, update_case_status,
                           generate_case_pdf, generate_executive_pdf, generate_mitigation_pdf)
 
@@ -397,17 +398,23 @@ if page == "📊 Dashboard":
         st.markdown('<div class="panel"><div class="panel-header">🚨 Active Alerts</div></div>', unsafe_allow_html=True)
         hi_events = fdf[fdf["severity"].isin(["critical","high"])].copy()
         if not hi_events.empty:
-            for _, row in hi_events.sort_values("time", ascending=False).head(8).iterrows():
+            for alert_i, (_, row) in enumerate(hi_events.sort_values("time", ascending=False).head(8).iterrows()):
                 sev = str(row.get("severity","low"))
                 atk = row.get("attack_type","") or row.get("event_type","")
+                aip = str(row.get("ip","?"))
+                blocked_tag = ' <span class="sev-badge sev-low">BLOCKED</span>' if is_blocked(aip) else ''
                 st.markdown(f"""<div class="alert-item">
                     <div class="alert-dot alert-dot-{sev}"></div>
                     <div class="alert-info">
-                        <div class="alert-type">{atk}</div>
-                        <div class="alert-meta">{row.get('ip','?')} • {format_ts(row.get('time',''))}</div>
+                        <div class="alert-type">{atk}{blocked_tag}</div>
+                        <div class="alert-meta">{aip} - {format_ts(row.get('time',''))}</div>
                     </div>
                     <span class="sev-badge sev-{sev}">{sev}</span>
                 </div>""", unsafe_allow_html=True)
+                if not is_blocked(aip) and aip != "?":
+                    if st.button(f"🚫 Block {aip}", key=f"blk_alert_{alert_i}", type="primary"):
+                        do_block_ip(aip, f"Manual block from Alerts: {atk}")
+                        st.success(f"🚫 {aip} blocked!"); st.rerun()
         else: st.info("No active alerts.")
 
     # ROW 3: Severity Dist (6) + AI Insight Widget (6)
@@ -578,12 +585,22 @@ elif page == "🧠 AI Threat Analysis":
         # Raw log
         with st.expander("📋 Raw Log Data", expanded=False): st.json(logs[chosen])
         st.markdown("---")
-        if st.button("📂 Create Case from Analysis", key="create_case"):
-            case = create_case(title=f"{analysis['threat_type']} — {analysis['ip']}", severity=analysis["severity"],
-                              description=f"Attack: {analysis['attack_pattern']}\nImpact: {analysis['impact']}",
-                              log_index=chosen, extra={"threat_type":analysis["threat_type"],"risk_score":analysis["risk_score"],
-                              "mitre_technique":analysis.get("mitre_technique",""),"mitigation_steps":analysis.get("mitigation_steps",[])})
-            st.success(f"✅ Case #{case['id']} created!")
+        ab1, ab2 = st.columns(2)
+        with ab1:
+            if st.button("📂 Create Case from Analysis", key="create_case", use_container_width=True):
+                case = create_case(title=f"{analysis['threat_type']} - {analysis['ip']}", severity=analysis["severity"],
+                                  description=f"Attack: {analysis['attack_pattern']}\nImpact: {analysis['impact']}",
+                                  log_index=chosen, extra={"threat_type":analysis["threat_type"],"risk_score":analysis["risk_score"],
+                                  "mitre_technique":analysis.get("mitre_technique",""),"mitigation_steps":analysis.get("mitigation_steps",[])})
+                st.success(f"Case #{case['id']} created!")
+        with ab2:
+            tip = analysis.get("ip", "")
+            if tip and not is_blocked(tip):
+                if st.button(f"🚫 Block IP {tip}", key="blk_ai", type="primary", use_container_width=True):
+                    do_block_ip(tip, f"Manual block from AI Analysis: {analysis['threat_type']}")
+                    st.success(f"🚫 {tip} blocked!"); st.rerun()
+            elif tip:
+                st.info(f"✅ {tip} is already blocked")
 
 # ──────────────── 🛡 MITIGATION CENTER ──────────────────────────────────────
 elif page == "🛡 Mitigation Center":
@@ -606,6 +623,23 @@ elif page == "🛡 Mitigation Center":
         if all_recs:
             for i,r in enumerate(all_recs,1): st.write(f"**{i}.** {r}")
         else: st.info("System clean.")
+    # Block attacker IPs section
+    st.markdown("---")
+    st.markdown("#### 🚫 Block Attacker IPs")
+    if "ip" in fdf.columns and attack_mask.any():
+        top_attacker_ips = fdf.loc[attack_mask, "ip"].value_counts().head(5)
+        for bip_i, (bip, cnt) in enumerate(top_attacker_ips.items()):
+            bc1, bc2 = st.columns([3, 1])
+            with bc1:
+                status_tag = "🟢 BLOCKED" if is_blocked(bip) else "🔴 Not Blocked"
+                st.write(f"**{bip}** - {cnt} attacks - {status_tag}")
+            with bc2:
+                if not is_blocked(bip):
+                    if st.button(f"🚫 Block", key=f"blk_mit_{bip_i}", type="primary"):
+                        do_block_ip(bip, f"Manual block from Mitigation Center")
+                        st.success(f"🚫 {bip} blocked!"); st.rerun()
+    else:
+        st.info("No attacker IPs detected.")
     st.markdown("---")
     if all_steps or all_recs:
         pdf = generate_mitigation_pdf({"risk_score":overall,"severity":"high" if overall>=70 else "medium","threat_type":"Aggregated"}, all_steps, all_recs)
@@ -625,9 +659,9 @@ elif page == "📂 Case Management":
                 <div class="rc-title">{si} Case #{case['id']}: {case.get('title','Untitled')}</div>
                 <div class="rc-meta"><span class="sev-badge sev-{sev}">{sev.upper()}</span> &nbsp;•&nbsp; {status} &nbsp;•&nbsp; {format_ts(case.get('created_at',''))}</div>
             </div>""", unsafe_allow_html=True)
-            cc1,cc2,cc3 = st.columns([2,1,1])
+            cc1,cc2,cc3,cc4 = st.columns([2,1,0.7,0.7])
             with cc1:
-                with st.expander(f"Details — Case #{case['id']}", expanded=False):
+                with st.expander(f"Details - Case #{case['id']}", expanded=False):
                     st.write(case.get("description","No description"))
                     if case.get("threat_type"): st.write(f"**Threat:** {case['threat_type']}")
                     if case.get("mitre_technique"): st.write(f"**MITRE:** {case['mitre_technique']}")
@@ -639,6 +673,15 @@ elif page == "📂 Case Management":
             with cc3:
                 pb = generate_case_pdf(case)
                 st.download_button("📄 PDF",pb,file_name=f"case_{case['id']}.pdf",mime="application/pdf",key=f"pd_{case['id']}")
+            with cc4:
+                # Extract IP from case title (format: "Threat Type - IP")
+                case_ip = case.get("title","").split(" - ")[-1].strip() if " - " in case.get("title","") else ""
+                if case_ip and not is_blocked(case_ip):
+                    if st.button("🚫 Block", key=f"blk_case_{case['id']}", type="primary"):
+                        do_block_ip(case_ip, f"Manual block from Case #{case['id']}")
+                        st.success(f"Blocked!"); st.rerun()
+                elif case_ip:
+                    st.markdown('<span class="sev-badge sev-low">BLOCKED</span>', unsafe_allow_html=True)
 
 # ──────────────── 📊 REPORTS ────────────────────────────────────────────────
 elif page == "📊 Reports":

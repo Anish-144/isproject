@@ -1,7 +1,7 @@
 {
   "127.0.0.1": {
-    "reason": "Critical event: SQL Injection",
-    "timestamp": "2026-02-26T18:19:03.110998+00:00",
+    "reason": "Critical event: honeypot_trap",
+    "timestamp": "2026-02-26T18:42:04.051062+00:00",
     "blocked": true
   }
 }
